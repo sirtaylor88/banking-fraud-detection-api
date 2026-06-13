@@ -10,6 +10,7 @@ A full-featured banking application built with FastAPI, providing secure and eff
 - **ORM / Migrations**: [SQLModel](https://sqlmodel.tiangolo.com/) + [Alembic](https://alembic.sqlalchemy.org/)
 - **Auth**: [argon2-cffi](https://argon2-cffi.readthedocs.io/) for password hashing
 - **Config**: [pydantic-settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) (environment-based)
+- **Logging**: [loguru](https://loguru.readthedocs.io/) with rotating file sinks
 
 ## Project structure
 
@@ -18,7 +19,11 @@ src/backend/app/
 ├── api/
 │   └── main.py        # API router aggregator
 ├── core/
-│   └── config.py      # Settings loaded from .env.local
+│   ├── config.py      # Settings loaded from .env.local
+│   └── logging.py     # Loguru setup and get_logger()
+├── logs/              # Runtime log files (git-ignored)
+│   ├── debug.log      # DEBUG/INFO entries
+│   └── error.log      # ERROR+ entries with backtrace
 ├── routes/
 │   └── home.py        # Home endpoint
 └── main.py            # FastAPI app instance
