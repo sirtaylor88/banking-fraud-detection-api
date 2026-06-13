@@ -2,6 +2,8 @@
 
 from fastapi import FastAPI
 
+from src.backend.app.api.main import api_router
+
 app = FastAPI(
     title="NextGen Bank - FastAPI",
     description=(
@@ -10,8 +12,4 @@ app = FastAPI(
     ),
 )
 
-
-@app.get("/")
-def home() -> dict[str, str]:
-    """Return a welcome message."""
-    return {"message": "Welcome to NextGen Bank - FastAPI!"}
+app.include_router(api_router)
