@@ -2,6 +2,7 @@
 
 from fastapi.testclient import TestClient
 
+from src.backend.app.core.config import settings
 from src.backend.app.main import app
 
 client = TestClient(app)
@@ -9,6 +10,6 @@ client = TestClient(app)
 
 def test_home():
     """Test the home endpoint returns a welcome message."""
-    response = client.get("/")
+    response = client.get(f"{settings.API_V1_STR}/")
     assert response.status_code == 200
     assert response.json() == {"message": "Welcome to NextGen Bank - FastAPI!"}
