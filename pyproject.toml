@@ -1,0 +1,48 @@
+[project]
+name = "banking-fraud-detection-api"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12.9"
+dependencies = [
+    "alembic>=1.18.4",
+    "argon2-cffi>=25.1.0",
+    "asyncpg>=0.31.0",
+    "fastapi[standard]>=0.136.3",
+    "greenlet>=3.5.1",
+    "psycopg[binary,pool]>=3.3.4",
+    "pydantic-settings>=2.14.1",
+    "sqlmodel>=0.0.38",
+]
+
+[dependency-groups]
+dev = [
+    "bandit>=1.9.4",
+    "mypy>=2.1.0",
+    "pre-commit>=4.6.0",
+    "pydocstyle>=6.3.0",
+    "pylint>=4.0.5",
+    "pytest>=9.0.3",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.15.17",
+    "sphinx>=9.1.0",
+    "sphinx-autobuild>=2025.8.25",
+    "sphinx-copybutton>=0.5.2",
+    "sphinx-lint>=1.0.2",
+]
+
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+select = ["I"]
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.pylint.messages_control]
+disable = ["too-few-public-methods", "duplicate-code"]
