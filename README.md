@@ -50,7 +50,7 @@ src/backend/app/
 
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/getting-started/installation/)
-- PostgreSQL
+- Docker & Docker Compose
 
 ### 1 · Install dependencies
 
@@ -64,6 +64,8 @@ uv sync --all-groups
 cp src/.envs/.env.example src/.envs/.env.local
 ```
 
+Fill in `src/.envs/.env.local`:
+
 | Variable | Description | Example |
 |---|---|---|
 | `PROJECT_NAME` | Application name shown in API docs | `NextGen Bank` |
@@ -71,8 +73,25 @@ cp src/.envs/.env.example src/.envs/.env.local
 | `API_V1_STR` | API version prefix | `/api/v1` |
 | `SITE_NAME` | Site display name | `NextGen Bank` |
 | `ENVIRONMENT` | Runtime environment | `local` · `staging` · `production` |
+| `POSTGRES_USER` | Database user | `postgres` |
+| `POSTGRES_PASSWORD` | Database password | `secret` |
+| `POSTGRES_DB` | Database name | `fraud_db` |
+| `POSTGRES_HOST` | Hostname (service name in Compose) | `postgres-db` |
+| `POSTGRES_PORT` | Database port | `5432` |
+| `POSTGRES_SCHEMA` | Schema name (no hyphens) | `public` |
+| `DATABASE_URL` | Assembled async DSN (auto-composed) | _(leave as-is)_ |
 
-### 3 · Run the development server
+### 3 · Start the database
+
+```bash
+docker network create nextgen_local_nw                   # one-time setup
+docker compose -f docker-compose.local.yml config        # verify env variable injection
+docker compose -f docker-compose.local.yml up -d         # start PostgreSQL
+docker compose -f docker-compose.local.yml down          # stop
+docker compose -f docker-compose.local.yml down -v       # stop and delete volume
+```
+
+### 4 · Run the development server
 
 ```bash
 uv run fastapi dev src/backend/app/main.py

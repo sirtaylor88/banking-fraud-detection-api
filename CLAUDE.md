@@ -19,6 +19,18 @@ uv run fastapi dev src/backend/app/main.py   # Development server with hot reloa
 uv run fastapi run src/backend/app/main.py   # Production server
 ```
 
+## Docker
+
+```bash
+docker network create nextgen_local_nw                        # one-time: create external network
+docker compose -f docker-compose.local.yml config             # verify env variable injection
+docker compose -f docker-compose.local.yml up -d              # start PostgreSQL
+docker compose -f docker-compose.local.yml down               # stop
+docker compose -f docker-compose.local.yml down -v            # stop and delete volume
+```
+
+The compose file uses an external network (`nextgen_local_nw`) and a named volume (`nextgen_local_db`). The network must be created before the first `up`.
+
 ## Linting and type checking
 
 ```bash
@@ -66,6 +78,8 @@ cp src/.envs/.env.example src/.envs/.env.local
 ```
 
 `src/.envs/.env.local` is git-ignored. `src/.envs/.env.example` is committed and must be kept in sync with the `Settings` fields in `core/config.py`.
+
+Key vars: `PROJECT_NAME`, `API_V1_STR`, `ENVIRONMENT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_HOST` (= service name in Compose), `POSTGRES_PORT`, `POSTGRES_SCHEMA`, `DATABASE_URL` (assembled from the POSTGRES_* vars).
 
 ## Code style notes
 

@@ -1,0 +1,21 @@
+services:
+  postgres-db:
+    build:
+      context: .
+      dockerfile: ./src/backend/docker/local/postgres/Dockerfile
+    container_name: postgres-db
+    ports:
+      - "5432:5432"
+    volumes:
+      - nextgen_local_db:/var/lib/postgresql/data
+    env_file:
+      - ./src/.envs/.env.local
+    networks:
+      - nextgen_local_nw
+
+networks:
+  nextgen_local_nw:
+    external: true
+
+volumes:
+  nextgen_local_db:
