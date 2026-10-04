@@ -14,6 +14,7 @@ dependencies = [
     "psycopg[binary,pool]>=3.3.4",
     "pydantic-settings>=2.14.1",
     "sqlmodel>=0.0.38",
+    "svcs>=26.2.0",
 ]
 
 [dependency-groups]
@@ -45,11 +46,13 @@ force-sort-within-sections = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+anyio_mode = "auto"
 env = [
     "PROJECT_NAME=NextGen Bank - FastAPI",
     "PROJECT_DESCRIPTION=Test environment",
     "API_V1_STR=/api/v1",
     "SITE_NAME=NextGen Bank",
+    "DATABASE_URL=postgresql+asyncpg://test:test@localhost:5432/test",
 ]
 
 [tool.pylint.messages_control]
