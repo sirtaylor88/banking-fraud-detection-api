@@ -14,7 +14,7 @@
 ## Tech stack
 
 | Layer | Technology |
-|---|---|
+| --- | --- |
 | Runtime | Python 3.12 · [uv](https://docs.astral.sh/uv/) |
 | Framework | [FastAPI](https://fastapi.tiangolo.com/) |
 | Database | PostgreSQL · [asyncpg](https://magicstack.github.io/asyncpg/) · [psycopg\[pool\]](https://www.psycopg.org/) |
@@ -23,25 +23,39 @@
 | Config | [pydantic-settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) |
 | Logging | [loguru](https://loguru.readthedocs.io/) |
 | Service registry | [svcs](https://svcs.hynek.me/) |
+| Reverse proxy | [Traefik v3.6.2+](https://doc.traefik.io/traefik/) ¹ |
+| Mail (local) | [Mailpit](https://mailpit.axllent.org/) |
+
+> ¹ Traefik v3.6.2+ is required for compatibility with Docker Engine 29+. Earlier versions bundle a Docker SDK that defaults to API v1.24, which Docker Engine 29 rejects (minimum is 1.40), breaking container discovery.
 
 ---
 
 ## Project structure
 
-```
-src/backend/app/
-├── api/
-│   └── main.py        # API router aggregator
-├── core/
-│   ├── config.py      # Settings loaded from .env.local
-│   ├── db.py          # SQLAlchemy engine and async_session factory
-│   └── logging.py     # Loguru setup and get_logger()
-├── logs/              # Runtime log files (git-ignored)
-│   ├── debug.log      # DEBUG / INFO entries
-│   └── error.log      # ERROR+ entries with backtrace
-├── routes/
-│   └── home.py        # Home endpoint
-└── main.py            # FastAPI app instance + svcs lifespan
+```text
+src/backend/
+├── app/
+│   ├── api/
+│   │   └── main.py        # API router aggregator
+│   ├── core/
+│   │   ├── config.py      # Settings loaded from .env.local
+│   │   ├── db.py          # SQLAlchemy engine and async_session factory
+│   │   └── logging.py     # Loguru setup and get_logger()
+│   ├── logs/              # Runtime log files (git-ignored)
+│   │   ├── debug.log      # DEBUG / INFO entries
+│   │   └── error.log      # ERROR+ entries with backtrace
+│   ├── routes/
+│   │   └── home.py        # Home endpoint
+│   └── main.py            # FastAPI app instance + svcs lifespan
+└── docker/local/
+    ├── fastapi/
+    │   ├── Dockerfile     # Multi-stage image (uv + non-root user)
+    │   ├── entrypoint.sh  # Waits for PostgreSQL, then exec CMD
+    │   └── start.sh       # Runs fastapi dev with hot-reload
+    ├── postgres/
+    │   └── Dockerfile     # postgres:17.5-bullseye base
+    └── traefik/
+        └── traefik.yml    # Traefik static configuration
 ```
 
 ---
@@ -69,7 +83,7 @@ cp src/.envs/.env.example src/.envs/.env.local
 Fill in `src/.envs/.env.local`:
 
 | Variable | Description | Example |
-|---|---|---|
+| --- | --- | --- |
 | `PROJECT_NAME` | Application name shown in API docs | `NextGen Bank` |
 | `PROJECT_DESCRIPTION` | Description shown in API docs | `Banking API` |
 | `API_V1_STR` | API version prefix | `/api/v1` |
@@ -83,23 +97,29 @@ Fill in `src/.envs/.env.local`:
 | `POSTGRES_SCHEMA` | Schema name (no hyphens) | `public` |
 | `DATABASE_URL` | Assembled async DSN (auto-composed) | _(leave as-is)_ |
 
-### 3 · Start the database
+### 3 · Start the full stack
 
 ```bash
-docker network create nextgen_local_nw                   # one-time setup
-docker compose -f docker-compose.local.yml config        # verify env variable injection
-docker compose -f docker-compose.local.yml up -d         # start PostgreSQL
-docker compose -f docker-compose.local.yml down          # stop
-docker compose -f docker-compose.local.yml down -v       # stop and delete volume
+docker network create nextgen_local_nw                                                 # one-time setup
+docker compose -f docker-compose.local.yml config                                      # verify env variable injection
+docker compose -f docker-compose.local.yml up -d --build                               # start all services
+docker compose -f docker-compose.local.yml up -d --build --force-recreate             # force recreate all containers
+docker compose -f docker-compose.local.yml up -d --build --remove-orphans             # remove containers for removed services
+docker compose -f docker-compose.local.yml up -d --build --force-recreate --remove-orphans  # full rebuild
+docker compose -f docker-compose.local.yml down                                        # stop
+docker compose -f docker-compose.local.yml down -v                                     # stop and delete volumes
 ```
 
-### 4 · Run the development server
+Services started:
 
-```bash
-uv run fastapi dev src/backend/app/main.py
-```
+| Service | URL |
+| --- | --- |
+| API (hot-reload) | `http://api.localhost` · home at `http://api.localhost{API_V1_STR}/home/` (`http://api.localhost/api/v1/home/`) · docs at `http://api.localhost{API_V1_STR}/docs` |
+| Traefik dashboard | `http://localhost:8080` |
+| Mailpit web UI | `http://localhost:8025` |
+| PostgreSQL | `localhost:5432` |
 
-Once running, API docs are at `{API_V1_STR}/docs`.
+The `api` service mounts the project root for hot-reload — code changes are reflected immediately without rebuilding.
 
 ---
 

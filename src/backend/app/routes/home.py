@@ -6,7 +6,7 @@ from src.backend.app.core.logging import get_logger
 
 logger = get_logger()
 
-router = APIRouter()
+router = APIRouter(prefix="/home", tags=["Home"])
 
 
 @router.get("/")

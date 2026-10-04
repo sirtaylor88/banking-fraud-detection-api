@@ -22,14 +22,21 @@ uv run fastapi run src/backend/app/main.py   # Production server
 ## Docker
 
 ```bash
-docker network create nextgen_local_nw                        # one-time: create external network
-docker compose -f docker-compose.local.yml config             # verify env variable injection
-docker compose -f docker-compose.local.yml up -d              # start PostgreSQL
-docker compose -f docker-compose.local.yml down               # stop
-docker compose -f docker-compose.local.yml down -v            # stop and delete volume
+docker network create nextgen_local_nw                                                      # one-time: create external network
+docker compose -f docker-compose.local.yml config                                           # verify env variable injection
+docker compose -f docker-compose.local.yml up -d --build                                    # start all services
+docker compose -f docker-compose.local.yml up -d --build --force-recreate                  # force recreate all containers
+docker compose -f docker-compose.local.yml up -d --build --remove-orphans                  # remove containers for removed services
+docker compose -f docker-compose.local.yml up -d --build --force-recreate --remove-orphans # full rebuild
+docker compose -f docker-compose.local.yml down                                             # stop
+docker compose -f docker-compose.local.yml down -v                                          # stop and delete all volumes
 ```
 
-The compose file uses an external network (`nextgen_local_nw`) and a named volume (`nextgen_local_db`). The network must be created before the first `up`.
+Services: `api` (FastAPI + hot-reload via `start.sh`), `postgres-db`, `traefik` (reverse proxy), `mailpit` (local email).
+
+URLs: API → `http://api.localhost` | Traefik dashboard → `http://localhost:8080` | Mailpit → `http://localhost:8025`
+
+The external network (`nextgen_local_nw`) must be created before the first `up`. Named volumes: `nextgen_local_db` (PostgreSQL), `nextgen_mailpit_data` (Mailpit), `nextgen_local_logs` (app logs — seeded from image layer to preserve non-root ownership).
 
 ## Linting and type checking
 

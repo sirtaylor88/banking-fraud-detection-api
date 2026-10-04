@@ -1,0 +1,30 @@
+api:
+  dashboard: true # Enable the Traefik dashboard for monitoring and managing routes, services, and middlewares
+  insecure: true # Allow insecure connections (for development only)
+
+log:
+  level: DEBUG
+  format: json
+
+accessLog:
+  filePath: "/var/log/traefik/access.log"
+  format: json
+
+middlewares:
+  retry: # middleware name
+    retry: # middeleware type
+      attempts: 3
+      initialInterval: 500ms # Initial interval between retries
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock" # Use the Docker socket to communicate with the Docker daemon
+    exposedByDefault: false # Do not expose all containers by default, only those with the traefik.enable=true label
+    watch: true # Watch for changes in the Docker environment and update the configuration accordingly
+    network: nextgen_local_nw # Specify the Docker network to use for Traefik
+
+entryPoints:
+  web:
+    address: ":80" # Listen on port 80 for HTTP traffic
+  websecure:
+    address: ":443" # Listen on port 443 for HTTPS traffic

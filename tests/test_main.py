@@ -9,6 +9,6 @@ from src.backend.app.main import app
 def test_home():
     """Test the home endpoint returns a welcome message."""
     with TestClient(app) as client:
-        response = client.get(f"{settings.API_V1_STR}/")
+        response = client.get(f"{settings.API_V1_STR}/home/")
         assert response.status_code == 200
         assert response.json() == {"message": "Welcome to NextGen Bank - FastAPI!"}

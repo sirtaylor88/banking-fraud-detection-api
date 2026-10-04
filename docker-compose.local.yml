@@ -1,13 +1,71 @@
 services:
+  traefik:
+    # * Requires v3.6.2+: earlier versions bundle a Docker Go SDK that defaults to API v1.24,
+    # * which Docker Engine 29+ (minimum API 1.40) rejects — Traefik fails to discover containers.
+    image: docker.io/traefik:v3.7.13
+    restart: unless-stopped
+    command:
+      - --providers.docker # Enable Traefik to discover services from Docker
+    ports:
+      - "80:80"     # HTTP traffic
+      - "8080:8080" # Traefik dashboard
+      - "443:443"   # HTTPS traffic
+    volumes:
+      - ./src/backend/docker/local/traefik/traefik.yml:/etc/traefik/traefik.yml # Traefik configuration file
+      - /var/run/docker.sock:/var/run/docker.sock:ro # Allow Traefik to listen to Docker events and discover containers
+    networks:
+      - nextgen_local_nw
+
+  api: &api
+    build:
+      context: .
+      dockerfile: ./src/backend/docker/local/fastapi/Dockerfile
+    volumes:
+      - .:/src # Mount source code for hot-reload (start.sh runs fastapi dev --reload)
+      # * Named volume for logs — Docker seeds it from the image layer on first use, preserving
+      # * the fastapi-user ownership set by the Dockerfile. A bind mount would be created by
+      # * Docker as root on the host, making the directory unwritable by the non-root container user.
+      - nextgen_local_logs:/app/src/backend/app/logs
+    ports:
+      - "8000:8000" # Expose the FastAPI app on port 8000
+    env_file:
+      - ./src/.envs/.env.local
+    command: /start.sh # Overrides CMD; runs fastapi dev with hot-reload (see start.sh)
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.entrypoints=web"
+      - "traefik.http.routers.api.rule=Host(`api.localhost`)"  # Route api.localhost to this service
+      - "traefik.http.routers.api.service=api-service"
+      - "traefik.http.services.api-service.loadbalancer.server.port=8000"
+    depends_on:
+      - postgres-db
+      - mailpit
+    networks:
+      - nextgen_local_nw
+
+  mailpit:
+    image: docker.io/axllent/mailpit:latest
+    environment:
+      MP_MAX_MESSAGES: 5000
+      MP_DATA_FILE: /data/mailpit.db
+      MP_SMPT_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+    ports:
+      - "1025:1025" # SMTP port for sending emails
+      - "8025:8025" # Web UI for viewing emails
+    volumes:
+      - nextgen_mailpit_data:/data # Persist email data outside the container
+    networks:
+      - nextgen_local_nw
+
   postgres-db:
     build:
       context: .
       dockerfile: ./src/backend/docker/local/postgres/Dockerfile
-    container_name: postgres-db
     ports:
       - "5432:5432"
     volumes:
-      - nextgen_local_db:/var/lib/postgresql/data
+      - nextgen_local_db:/var/lib/postgresql/data # Persist PostgreSQL data outside the container
     env_file:
       - ./src/.envs/.env.local
     networks:
@@ -15,7 +73,9 @@ services:
 
 networks:
   nextgen_local_nw:
-    external: true
+    external: true # Must be created manually: docker network create nextgen_local_nw
 
 volumes:
-  nextgen_local_db:
+  nextgen_local_db:      # PostgreSQL data
+  nextgen_mailpit_data:  # Mailpit email storage
+  nextgen_local_logs:    # App log files (fastapi-user owned, seeded from image layer)

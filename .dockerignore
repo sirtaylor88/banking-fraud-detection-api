@@ -1,0 +1,60 @@
+# Version control
+.git
+.gitignore
+
+# Python caches and build artifacts
+__pycache__
+*.py[cod]
+*.so
+*.egg-info
+.eggs
+dist
+build
+
+# Virtual environments
+.venv
+venv
+env
+
+# Environment files — exclude all .env* except the committed example
+src/.envs/*
+!src/.envs/.env.example
+
+# Test and coverage artifacts
+.coverage
+.coverage.*
+htmlcov
+.pytest_cache
+.tox
+.nox
+
+# Type checker caches
+.mypy_cache
+.dmypy.json
+.pyre
+.pytype
+
+# Linter caches
+.ruff_cache
+
+# IDE and editor settings
+.vscode
+.idea
+
+# Logs — generated at runtime, not needed in the image
+src/backend/app/logs
+
+# Docker config files — not needed inside the container.
+# Only Dockerfiles and compose files are excluded; entrypoint/start scripts must
+# remain in the build context so the Dockerfile can COPY them into the image.
+.dockerignore
+docker-compose*.yml
+src/**/Dockerfile
+
+# Documentation
+README.md
+CLAUDE.md
+LICENSE
+
+# CI / pre-commit
+.pre-commit-config.yaml
