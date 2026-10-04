@@ -63,11 +63,13 @@ uv run pre-commit install
 
 The FastAPI application lives in `src/backend/app/`.
 
-- **`src/backend/app/main.py`** — FastAPI app instance; includes `api_router` with `API_V1_STR` prefix
+- **`src/backend/app/main.py`** — FastAPI app instance; svcs lifespan registers `AsyncSession` factory and disposes the engine on shutdown; includes `api_router` with `API_V1_STR` prefix
 - **`src/backend/app/api/main.py`** — aggregates all route routers into `api_router`
 - **`src/backend/app/routes/`** — individual route modules (one `APIRouter` per file)
 - **`src/backend/app/core/config.py`** — `Settings` (pydantic-settings); loaded from `src/.envs/.env.local`; all field defaults are intentionally empty — do not add fallback values
+- **`src/backend/app/core/db.py`** — SQLAlchemy `engine` and `async_session` factory; session lifecycle is managed by svcs, not by standalone helpers
 - **`src/backend/app/core/logging.py`** — loguru setup with `debug.log` (DEBUG/INFO) and `error.log` (ERROR+) sinks; use `get_logger()` throughout the app
+- **Service registry**: `svcs` — `AsyncSession` is registered at startup via `app.state.svcs_registry`; routes resolve it with `svcs.Container(request.app.state.svcs_registry).aget(AsyncSession)`
 - **Database**: PostgreSQL via `asyncpg` (async) and `psycopg[pool]` (sync/pool), with `SQLModel` for ORM and `Alembic` for migrations
 - **Auth**: `argon2-cffi` for password hashing
 

@@ -22,6 +22,7 @@
 | Auth | [argon2-cffi](https://argon2-cffi.readthedocs.io/) |
 | Config | [pydantic-settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) |
 | Logging | [loguru](https://loguru.readthedocs.io/) |
+| Service registry | [svcs](https://svcs.hynek.me/) |
 
 ---
 
@@ -33,13 +34,14 @@ src/backend/app/
 │   └── main.py        # API router aggregator
 ├── core/
 │   ├── config.py      # Settings loaded from .env.local
+│   ├── db.py          # SQLAlchemy engine and async_session factory
 │   └── logging.py     # Loguru setup and get_logger()
 ├── logs/              # Runtime log files (git-ignored)
 │   ├── debug.log      # DEBUG / INFO entries
 │   └── error.log      # ERROR+ entries with backtrace
 ├── routes/
 │   └── home.py        # Home endpoint
-└── main.py            # FastAPI app instance
+└── main.py            # FastAPI app instance + svcs lifespan
 ```
 
 ---
