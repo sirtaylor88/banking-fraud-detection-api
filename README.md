@@ -23,6 +23,9 @@
 | Config | [pydantic-settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) |
 | Logging | [loguru](https://loguru.readthedocs.io/) |
 | Service registry | [svcs](https://svcs.hynek.me/) |
+| Background tasks | [Celery](https://docs.celeryq.dev/) · [RabbitMQ](https://www.rabbitmq.com/) (broker) · [Redis](https://redis.io/) (result backend) |
+| Periodic tasks | [celery-redbeat](https://github.com/sibson/redbeat) (schedule stored in Redis) |
+| Task monitoring | [Flower](https://flower.readthedocs.io/) |
 | Reverse proxy | [Traefik v3.6.2+](https://doc.traefik.io/traefik/) ¹ |
 | Mail (local) | [Mailpit](https://mailpit.axllent.org/) |
 
@@ -38,6 +41,7 @@ src/backend/
 │   ├── api/
 │   │   └── main.py        # API router aggregator
 │   ├── core/
+│   │   ├── celery_app.py  # Celery app (RabbitMQ broker, Redis backend, redbeat)
 │   │   ├── config.py      # Settings loaded from .env.local
 │   │   ├── db.py          # SQLAlchemy engine and async_session factory
 │   │   └── logging.py     # Loguru setup and get_logger()
@@ -51,7 +55,11 @@ src/backend/
     ├── fastapi/
     │   ├── Dockerfile     # Multi-stage image (uv + non-root user)
     │   ├── entrypoint.sh  # Waits for PostgreSQL, then exec CMD
-    │   └── start.sh       # Runs fastapi dev with hot-reload
+    │   ├── start.sh       # Runs fastapi dev with hot-reload
+    │   └── celery/        # Start scripts, restarted on code changes by watchfiles
+    │       ├── worker/start.sh  # Celery worker
+    │       ├── beat/start.sh    # Celery beat (redbeat scheduler)
+    │       └── flower/start.sh  # Flower dashboard (basic auth)
     ├── postgres/
     │   └── Dockerfile     # postgres:17.5-bullseye base
     └── traefik/
@@ -96,6 +104,21 @@ Fill in `src/.envs/.env.local`:
 | `POSTGRES_PORT` | Database port | `5432` |
 | `POSTGRES_SCHEMA` | Schema name (no hyphens) | `public` |
 | `DATABASE_URL` | Assembled async DSN (auto-composed) | _(leave as-is)_ |
+| `MAIL_FROM` | Sender email address | `noreply@nextgen.local` |
+| `MAIL_FROM_NAME` | Sender display name | `NextGen Bank` |
+| `CELERY_FLOWER_USER` | Flower dashboard username (**required** — `flower` won't start without it) | `admin` |
+| `CELERY_FLOWER_PASSWORD` | Flower dashboard password (**required**, no spaces) | `secret` |
+
+These have defaults that match `docker-compose.local.yml`, so you can leave them empty when using Docker:
+
+| Variable | Default |
+| --- | --- |
+| `SMTP_HOST` · `SMTP_PORT` · `MAILPIT_UI_PORT` | `mailpit` · `1025` · `8025` |
+| `REDIS_HOST` · `REDIS_PORT` · `REDIS_DB` | `redis` · `6379` · `0` |
+| `RABBITMQ_HOST` · `RABBITMQ_PORT` | `rabbitmq` · `5672` |
+| `RABBITMQ_USER` · `RABBITMQ_PASSWORD` | `guest` · `guest` |
+
+The Celery broker URL and the Redis URL (`settings.REDIS_URL`) are built from these values. Don't set them directly.
 
 ### 3 · Start the full stack
 
@@ -106,6 +129,7 @@ docker compose -f docker-compose.local.yml up -d --build                        
 docker compose -f docker-compose.local.yml up -d --build --force-recreate             # force recreate all containers
 docker compose -f docker-compose.local.yml up -d --build --remove-orphans             # remove containers for removed services
 docker compose -f docker-compose.local.yml up -d --build --force-recreate --remove-orphans  # full rebuild
+docker compose -f docker-compose.local.yml up -d --build --renew-anon-volumes         # after changing dependencies
 docker compose -f docker-compose.local.yml down                                        # stop
 docker compose -f docker-compose.local.yml down -v                                     # stop and delete volumes
 ```
@@ -117,9 +141,28 @@ Services started:
 | API (hot-reload) | `http://api.localhost` · home at `http://api.localhost{API_V1_STR}/home/` (`http://api.localhost/api/v1/home/`) · docs at `http://api.localhost{API_V1_STR}/docs` |
 | Traefik dashboard | `http://localhost:8080` |
 | Mailpit web UI | `http://localhost:8025` |
+| Flower (Celery monitoring) | `http://flower.localhost` · log in with `CELERY_FLOWER_USER` / `CELERY_FLOWER_PASSWORD` |
+| RabbitMQ management | `http://rabbitmq.localhost` |
 | PostgreSQL | `localhost:5432` |
+| Redis | `localhost:6379` |
+| RabbitMQ (AMQP) | `localhost:5672` |
 
-The `api` service mounts the project root for hot-reload — code changes are reflected immediately without rebuilding.
+Background services (no URL): `celeryworker` (consumes the `nextgen_tasks` queue) and `celerybeat` (sends periodic tasks, schedule stored in Redis).
+
+The bare `http://api.localhost/` returns 404 because the app has no route at `/`. Use the `{API_V1_STR}` paths above.
+
+#### Hot reload
+
+The project root is mounted at `/app` in `api` and in every Celery service, so code changes apply without rebuilding. `fastapi dev` reloads the API, and `watchfiles` restarts the worker, beat and Flower when a `.py` file changes.
+
+The container keeps its own virtualenv in an anonymous volume at `/app/.venv`. That volume isn't refreshed by `--build`, so after adding or upgrading a dependency, run `up -d --build --renew-anon-volumes`.
+
+Containers run as a non-root `fastapi` user that doesn't own the mounted files. Commands that write into the project, such as `alembic revision`, should be run on the host with `uv run`, not inside a container.
+
+#### Troubleshooting
+
+- **`*.localhost` URLs return 404 for every service.** Another program is probably using ports 80/8080, often a second Docker engine. Check with `sudo ss -ltnp 'sport = :80'`. On WSL with Docker Desktop, a native `dockerd` installed in the distro competes for the same ports, and `docker ps` can't see its containers. If you only use Docker Desktop, disable it with `sudo systemctl disable --now docker.service docker.socket containerd.service`, then restart Docker Desktop.
+- **`flower` exits right after starting.** `CELERY_FLOWER_USER` or `CELERY_FLOWER_PASSWORD` is missing from `src/.envs/.env.local`.
 
 ---
 
@@ -132,6 +175,7 @@ uv run ruff check .       # Import sorting
 uv run ruff format .      # Formatting
 uv run pylint src/        # Style / quality
 uv run mypy .             # Type checking
+uv run bandit -r src/     # Security scan
 ```
 
 ### Testing
