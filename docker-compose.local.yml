@@ -21,7 +21,13 @@ services:
       context: .
       dockerfile: ./src/backend/docker/local/fastapi/Dockerfile
     volumes:
-      - .:/src # Mount source code for hot-reload (start.sh runs fastapi dev --reload)
+      # * Mount source code over the image's WORKDIR (/app) for hot-reload
+      # * (fastapi dev --reload and the watchfiles-based Celery scripts watch /app/src)
+      - .:/app
+      # * Anonymous volume keeps the image's .venv instead of the host's. It is seeded from
+      # * the image only when created: after changing dependencies, rebuild with
+      # * `up -d --build --renew-anon-volumes` to pick up the new .venv.
+      - /app/.venv
       # * Named volume for logs — Docker seeds it from the image layer on first use, preserving
       # * the fastapi-user ownership set by the Dockerfile. A bind mount would be created by
       # * Docker as root on the host, making the directory unwritable by the non-root container user.
@@ -38,8 +44,14 @@ services:
       - "traefik.http.routers.api.service=api-service"
       - "traefik.http.services.api-service.loadbalancer.server.port=8000"
     depends_on:
-      - postgres-db
-      - mailpit
+      postgres-db:
+        condition: service_started
+      mailpit:
+        condition: service_started
+      redis:
+        condition: service_healthy # wait until Redis answers PING
+      rabbitmq:
+        condition: service_healthy # wait until RabbitMQ accepts connections
     networks:
       - nextgen_local_nw
 
@@ -48,7 +60,7 @@ services:
     environment:
       MP_MAX_MESSAGES: 5000
       MP_DATA_FILE: /data/mailpit.db
-      MP_SMPT_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
       MP_SMTP_AUTH_ALLOW_INSECURE: "true"
     ports:
       - "1025:1025" # SMTP port for sending emails
@@ -71,6 +83,73 @@ services:
     networks:
       - nextgen_local_nw
 
+  redis:
+    image: docker.io/redis:7.0-alpine
+    command: ["redis-server", "--appendonly", "yes"] # Enable data persistence
+    ports:
+      - "6379:6379"
+    volumes:
+      - nextgen_redis_data:/data # Persist Redis data (results, redbeat schedule)
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - nextgen_local_nw
+
+  rabbitmq:
+    image: docker.io/rabbitmq:3.13-management-alpine
+    ports:
+      - "5672:5672" # RabbitMQ broker port
+      - "15672:15672" # RabbitMQ management UI port
+    volumes:
+      - nextgen_rabbitmq_data:/var/lib/rabbitmq # Persist RabbitMQ data outside the container
+    healthcheck:
+      # * check_port_connectivity (not ping): ping passes before the AMQP listener is up
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s # RabbitMQ takes a while to boot
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rabbitmq.entrypoints=web"
+      - "traefik.http.routers.rabbitmq.rule=Host(`rabbitmq.localhost`)"  # Route rabbitmq.localhost to this service
+      - "traefik.http.routers.rabbitmq.service=rabbitmq-service"
+      - "traefik.http.services.rabbitmq-service.loadbalancer.server.port=15672"
+    networks:
+      - nextgen_local_nw
+
+  celeryworker:
+    <<: *api
+    ports: []
+    labels: [] # Do not inherit the api Traefik labels: no HTTP route for the worker
+    command: /start-celeryworker.sh # Overrides CMD; runs Celery worker (see start-celeryworker.sh)
+
+  flower:
+    <<: *api
+    ports:
+      - "5555:5555" # Expose Flower monitoring UI on port 5555
+    volumes: # Overriding replaces the whole list, so repeat the api mounts
+      - .:/app
+      - /app/.venv
+      - nextgen_local_logs:/app/src/backend/app/logs
+      - nextgen_flower_data:/flower_data # Persist Flower database (see start-flower.sh)
+    command: /start-flower.sh # Overrides CMD; runs Flower monitoring (see start-flower.sh)
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.flower.entrypoints=web"
+      - "traefik.http.routers.flower.rule=Host(`flower.localhost`)"  # Route flower.localhost to this service
+      - "traefik.http.routers.flower.service=flower-service"
+      - "traefik.http.services.flower-service.loadbalancer.server.port=5555"
+
+  celerybeat:
+    <<: *api
+    ports: []
+    labels: [] # Do not inherit the api Traefik labels: no HTTP route for beat
+    command: /start-celerybeat.sh # Overrides CMD; runs Celery beat scheduler (see start-celerybeat.sh)
+
 networks:
   nextgen_local_nw:
     external: true # Must be created manually: docker network create nextgen_local_nw
@@ -79,3 +158,6 @@ volumes:
   nextgen_local_db:      # PostgreSQL data
   nextgen_mailpit_data:  # Mailpit email storage
   nextgen_local_logs:    # App log files (fastapi-user owned, seeded from image layer)
+  nextgen_redis_data:    # Redis data (Celery results, redbeat schedule)
+  nextgen_rabbitmq_data: # RabbitMQ data
+  nextgen_flower_data:   # Flower monitoring data

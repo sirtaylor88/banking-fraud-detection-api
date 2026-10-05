@@ -31,7 +31,7 @@ celery_app.conf.update(
     task_acks_late=True,  # ack after the task finishes, not when it is received
     task_reject_on_worker_lost=True,  # requeue the task if its worker crashes
     # * Routing
-    task_default_queue="nextgen-tasks",
+    task_default_queue="nextgen_tasks",
     task_create_missing_queues=True,  # declare unknown queues on first use
     # * Monitoring events, consumed by Flower
     task_send_sent_event=True,  # emit an event when a task is published

@@ -80,9 +80,15 @@ ENV PATH="${APP_HOME}/.venv/bin:$PATH"
 COPY ./src/backend/docker/local/fastapi/entrypoint.sh /entrypoint.sh
 COPY ./src/backend/docker/local/fastapi/start.sh /start.sh
 
+# * Copy the beat, celery and flower start scripts as root so they cannot be tampered with by the app user,
+# * then make them executable. Ownership stays with root intentionally (Sonarqube S6504).
+COPY ./src/backend/docker/local/fastapi/celery/beat/start.sh /start-celerybeat.sh
+COPY ./src/backend/docker/local/fastapi/celery/worker/start.sh /start-celeryworker.sh
+COPY ./src/backend/docker/local/fastapi/celery/flower/start.sh /start-flower.sh
+
 # * Ensure scripts have Unix line endings and are executable
-RUN sed -i 's/\r$//g' /entrypoint.sh /start.sh && \
-    chmod +x /entrypoint.sh /start.sh
+RUN sed -i 's/\r$//g' /entrypoint.sh /start.sh /start-celerybeat.sh /start-celeryworker.sh /start-flower.sh && \
+    chmod +x /entrypoint.sh /start.sh /start-celerybeat.sh /start-celeryworker.sh /start-flower.sh
 
 # * Copy the application code into the image and set ownership to the app user
 COPY --chown=${APP_USER}:${APP_GROUP} . ${APP_HOME}
@@ -91,9 +97,12 @@ COPY --chown=${APP_USER}:${APP_GROUP} . ${APP_HOME}
 # * COPY recreates intermediate directories (src/backend/app/) as root — any mkdir done
 # * before COPY would have its parent ownership overwritten. Running mkdir here guarantees
 # * the app user can write log files at runtime.
-RUN mkdir -p ${APP_HOME}/src/backend/app/logs && \
+# * /flower_data holds the Flower database, outside APP_HOME so the source bind mount
+# * does not hide it. The nextgen_flower_data named volume is seeded from it on first
+# * use, inheriting the app user ownership so Flower can write its database.
+RUN mkdir -p ${APP_HOME}/src/backend/app/logs /flower_data && \
     chmod 755 ${APP_HOME}/src/backend/app/logs && \
-    chown -R ${APP_USER}:${APP_GROUP} ${APP_HOME}/src/backend/app/logs
+    chown -R ${APP_USER}:${APP_GROUP} ${APP_HOME}/src/backend/app/logs /flower_data
 
 # * Switch to non-root user before starting the process
 USER ${APP_USER}
