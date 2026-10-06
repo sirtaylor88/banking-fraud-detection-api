@@ -43,14 +43,16 @@ src/backend/
 │   ├── core/
 │   │   ├── celery_app.py  # Celery app (RabbitMQ broker, Redis backend, redbeat)
 │   │   ├── config.py      # Settings loaded from .env.local
-│   │   ├── db.py          # SQLAlchemy engine and async_session factory
+│   │   ├── constants.py   # Timeouts, retries, pool sizes and log settings
+│   │   ├── db.py          # SQLAlchemy engine (pooled), async_session factory, init_db()
+│   │   ├── health.py      # Health checker for PostgreSQL, Redis and Celery
 │   │   └── logging.py     # Loguru setup and get_logger()
 │   ├── logs/              # Runtime log files (git-ignored)
 │   │   ├── debug.log      # DEBUG / INFO entries
 │   │   └── error.log      # ERROR+ entries with backtrace
 │   ├── routes/
 │   │   └── home.py        # Home endpoint
-│   └── main.py            # FastAPI app instance + svcs lifespan
+│   └── main.py            # FastAPI app, lifespan (svcs + startup health checks), /health
 └── docker/local/
     ├── fastapi/
     │   ├── Dockerfile     # Multi-stage image (uv + non-root user)
@@ -138,7 +140,7 @@ Services started:
 
 | Service | URL |
 | --- | --- |
-| API (hot-reload) | `http://api.localhost` · home at `http://api.localhost{API_V1_STR}/home/` (`http://api.localhost/api/v1/home/`) · docs at `http://api.localhost{API_V1_STR}/docs` |
+| API (hot-reload) | `http://api.localhost` · home at `http://api.localhost{API_V1_STR}/home/` (`http://api.localhost/api/v1/home/`) · docs at `http://api.localhost{API_V1_STR}/docs` · health at `http://api.localhost/health` |
 | Traefik dashboard | `http://localhost:8080` |
 | Mailpit web UI | `http://localhost:8025` |
 | Flower (Celery monitoring) | `http://flower.localhost` · log in with `CELERY_FLOWER_USER` / `CELERY_FLOWER_PASSWORD` |
@@ -151,6 +153,21 @@ Background services (no URL): `celeryworker` (consumes the `nextgen_tasks` queue
 
 The bare `http://api.localhost/` returns 404 because the app has no route at `/`. Use the `{API_V1_STR}` paths above.
 
+#### Health checks
+
+On startup the API checks the database connection (3 tries, with a longer wait after each failure). It then registers health checks for PostgreSQL, Redis and Celery and waits up to 90 seconds for all of them to pass. If they don't, startup fails with `Critical services failed to start!` and the API doesn't serve requests.
+
+`GET /health` (no `{API_V1_STR}` prefix) returns the overall status and a status for each service. Results are cached for 25 seconds.
+
+| Overall status | HTTP code |
+| --- | --- |
+| `healthy` | `200` |
+| `degraded`: at least one service is failing | `206` |
+| `unhealthy` | `503` |
+| The health check itself raised an error | `500` |
+
+Celery counts as healthy if a worker answers a ping. If no worker answers, it still counts as healthy as long as RabbitMQ is reachable, so the API can start before the worker. Traefik calls `/health` on the `api` service every 30 seconds (5 second timeout).
+
 #### Hot reload
 
 The project root is mounted at `/app` in `api` and in every Celery service, so code changes apply without rebuilding. `fastapi dev` reloads the API, and `watchfiles` restarts the worker, beat and Flower when a `.py` file changes.
@@ -162,6 +179,7 @@ Containers run as a non-root `fastapi` user that doesn't own the mounted files. 
 #### Troubleshooting
 
 - **`*.localhost` URLs return 404 for every service.** Another program is probably using ports 80/8080, often a second Docker engine. Check with `sudo ss -ltnp 'sport = :80'`. On WSL with Docker Desktop, a native `dockerd` installed in the distro competes for the same ports, and `docker ps` can't see its containers. If you only use Docker Desktop, disable it with `sudo systemctl disable --now docker.service docker.socket containerd.service`, then restart Docker Desktop.
+- **`api` exits with `Critical services failed to start!`.** PostgreSQL, Redis or RabbitMQ wasn't reachable within 90 seconds. Check `docker compose -f docker-compose.local.yml ps` and the container logs (or `error.log`) to see which check failed.
 - **`flower` exits right after starting.** `CELERY_FLOWER_USER` or `CELERY_FLOWER_PASSWORD` is missing from `src/.envs/.env.local`.
 
 ---
@@ -187,6 +205,8 @@ uv run pytest --cov=src/backend --cov-report=term-missing   # With coverage
 ```
 
 > 100% test coverage is required and enforced by pre-commit.
+
+Tests mock every external service, so no running database, Redis or RabbitMQ is needed. Shared helpers live in `tests/helpers.py` (for example `async_cm()`, a mock async context manager). Use `pytest.mark.parametrize` for variants of the same scenario.
 
 ### Pre-commit hooks
 

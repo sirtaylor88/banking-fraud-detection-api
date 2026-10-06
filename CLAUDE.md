@@ -67,6 +67,13 @@ uv run pytest --cov=src/backend --cov-report=term-missing                 # With
 
 Test environment variables are set via `pytest-env` in `[tool.pytest.ini_options]` in `pyproject.toml` — do not add a `conftest.py` to set env vars.
 
+Test conventions:
+
+- Tests mock every external service (database, Redis, Celery); none need running services. Shared helpers go in `tests/helpers.py` (e.g. `async_cm()` for async context manager mocks)
+- Use `pytest.mark.parametrize` for variants of the same scenario. Pass mock kwargs (`{"side_effect": ...}`) rather than mock instances, which would be shared across cases
+- Name fixtures as `@pytest.fixture(name="x")` on `def fixture_x()`, and use `@pytest.mark.usefixtures(...)` when the value is unused. The pylint pre-commit hook lints staged test files, so this avoids `redefined-outer-name` / `unused-argument`
+- Build exceptions and mocks before a `pytest.raises` block so it contains only one call that can raise
+
 ## Pre-commit hooks
 
 Pre-commit runs ruff, ruff-format, pylint, mypy, pydocstyle (Google convention), bandit, sphinx-lint, and pytest with 100% coverage. Install hooks with:
@@ -79,12 +86,14 @@ uv run pre-commit install
 
 The FastAPI application lives in `src/backend/app/`.
 
-- **`src/backend/app/main.py`** — FastAPI app instance; svcs lifespan registers `AsyncSession` factory and disposes the engine on shutdown; includes `api_router` with `API_V1_STR` prefix
+- **`src/backend/app/main.py`** — FastAPI app instance. On startup the lifespan registers the `AsyncSession` factory with svcs, runs `init_db()`, registers the database/Redis/Celery health checks and awaits `health_checker.wait_for_services()` inside `asyncio.timeout(STARTUP_TIMEOUT)` (90s, from `core/constants.py`; a timeout becomes `RuntimeError`). On shutdown or failed startup, `shutdown()` clears the health checker, closes the registry and disposes the engine. Exposes `GET /health` at the root, not under `API_V1_STR` (200 healthy / 206 degraded / 503 unhealthy / 500 check error; Traefik polls it), and includes `api_router` with the `API_V1_STR` prefix
 - **`src/backend/app/api/main.py`** — aggregates all route routers into `api_router`
 - **`src/backend/app/routes/`** — individual route modules (one `APIRouter` per file)
 - **`src/backend/app/core/config.py`** — `Settings` (pydantic-settings); loaded from `src/.envs/.env.local`. App-specific fields (project/API/site names, `DATABASE_URL`, mail sender) default to empty — do not add fallback values. Infrastructure fields (SMTP, Redis, RabbitMQ) may default to their local Docker Compose values (service name as host, standard port, local dev credentials), and every such default must have `Field` constraints (`min_length=1` for strings, `ge=1, le=65535` for ports). Derived URLs are `@computed_field` properties (e.g. `REDIS_URL`)
 - **`src/backend/app/core/celery_app.py`** — `celery_app`: RabbitMQ broker (AMQP URL built from `RABBITMQ_*`), Redis result backend (`settings.REDIS_URL`), JSON-only serialization, default queue `nextgen_tasks`. Periodic tasks use `celery-redbeat` (`redbeat_redis_url`; beat runs with `-S redbeat.RedBeatScheduler`). Tasks are autodiscovered from the `tasks` submodule of the packages listed in `autodiscover_tasks` (currently `src.backend.app.core.emails`, not created yet). Use only lowercase Celery 5 setting names. Retry options (`max_retries`, `default_retry_delay`) are per-task decorator arguments, not `conf` settings
-- **`src/backend/app/core/db.py`** — SQLAlchemy `engine` and `async_session` factory; session lifecycle is managed by svcs, not by standalone helpers
+- **`src/backend/app/core/db.py`** — SQLAlchemy `engine` (`AsyncAdaptedQueuePool`, `pool_pre_ping`) and `async_session` factory; `db_session_factory` (the svcs factory) rolls back on error and logs rollback/close failures without hiding the original error; `init_db()` runs `SELECT 1` with 3 tries and a longer wait after each failure. Session lifecycle is managed by svcs, not by standalone helpers
+- **`src/backend/app/core/health.py`** — `HealthCheck` and the module-level `health_checker`. Services are registered with `add_service(name, check, *, timeout, retry_delay, max_retries, depends_on)`; dependencies must be registered first. `check_service_health` retries and returns a `ServiceStatus`; a service with an unhealthy dependency is `DEGRADED`. `check_all_services` runs every check at once and caches the result for 25s. `wait_for_services()` polls with back-off until all are healthy and never times out on its own; callers bound it with `asyncio.timeout()`. Async functions take no `timeout` parameter: apply timeouts at the call site with `asyncio.timeout()`. Built-in checks: `check_database`, `check_redis`, `check_celery` (healthy with no workers if the broker is reachable)
+- **`src/backend/app/core/constants.py`** — app-wide constants grouped by area (logging, DB pool, DB init retries, health checks, startup timeout), each with a unit comment. Put new tuning values (timeouts, retry counts, intervals, sizes) here instead of hard-coding them, and import them by name (`from src.backend.app.core.constants import STARTUP_TIMEOUT`). In tests, patch a constant where it is used (`src.backend.app.main.STARTUP_TIMEOUT`), not in `constants`. Celery `conf` values stay in `celery_app.py`, commented inline
 - **`src/backend/app/core/logging.py`** — loguru setup with `debug.log` (DEBUG/INFO) and `error.log` (ERROR+) sinks; use `get_logger()` throughout the app
 - **Service registry**: `svcs` — `AsyncSession` is registered at startup via `app.state.svcs_registry`; routes resolve it with `svcs.Container(request.app.state.svcs_registry).aget(AsyncSession)`
 - **Database**: PostgreSQL via `asyncpg` (async) and `psycopg[pool]` (sync/pool), with `SQLModel` for ORM and `Alembic` for migrations
