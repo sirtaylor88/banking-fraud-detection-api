@@ -2,6 +2,7 @@
 
 import asyncio
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -20,6 +21,24 @@ from src.backend.app.core.logging import get_logger
 
 logger = get_logger()
 
+
+def db_connect_args(schema: str) -> dict[str, Any]:
+    """Build asyncpg connection arguments that select a schema.
+
+    asyncpg rejects unknown connection parameters such as ``schema``, so the
+    schema is applied as the ``search_path`` server setting instead.
+
+    Args:
+        schema: Schema name; an empty string keeps the server's default.
+
+    Returns:
+        dict[str, Any]: Keyword arguments for ``asyncpg.connect()``.
+    """
+    if not schema:
+        return {}
+    return {"server_settings": {"search_path": schema}}
+
+
 engine = create_async_engine(
     settings.DATABASE_URL,
     poolclass=AsyncAdaptedQueuePool,
@@ -28,6 +47,7 @@ engine = create_async_engine(
     max_overflow=DB_MAX_OVERFLOW,
     pool_timeout=DB_POOL_TIMEOUT,
     pool_recycle=DB_POOL_RECYCLE,
+    connect_args=db_connect_args(settings.POSTGRES_SCHEMA),
 )
 async_session = async_sessionmaker(
     bind=engine,

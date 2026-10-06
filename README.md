@@ -104,8 +104,8 @@ Fill in `src/.envs/.env.local`:
 | `POSTGRES_DB` | Database name | `fraud_db` |
 | `POSTGRES_HOST` | Hostname (service name in Compose) | `postgres-db` |
 | `POSTGRES_PORT` | Database port | `5432` |
-| `POSTGRES_SCHEMA` | Schema name (no hyphens) | `public` |
-| `DATABASE_URL` | Assembled async DSN (auto-composed) | _(leave as-is)_ |
+| `POSTGRES_SCHEMA` | Schema used as the connection `search_path` (no hyphens) | `public` |
+| `DATABASE_URL` | Assembled async DSN (auto-composed, no query parameters) | _(leave as-is)_ |
 | `MAIL_FROM` | Sender email address | `noreply@nextgen.local` |
 | `MAIL_FROM_NAME` | Sender display name | `NextGen Bank` |
 | `CELERY_FLOWER_USER` | Flower dashboard username (**required** — `flower` won't start without it) | `admin` |

@@ -28,6 +28,7 @@ class Settings(BaseSettings):
 
     # * Database settings
     DATABASE_URL: str = ""
+    POSTGRES_SCHEMA: str = ""  # set as search_path; empty keeps the server default
 
     # ! Important: For the SMTP, redis and RabbitMQ hosts, use same service names
     # ! declared as in docker-compose.yml
