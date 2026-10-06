@@ -136,22 +136,36 @@ docker compose -f docker-compose.local.yml down                                 
 docker compose -f docker-compose.local.yml down -v                                     # stop and delete volumes
 ```
 
-Services started:
+#### Local URLs
 
-| Service | URL |
+Open these in a browser once the stack is up. API paths use `API_V1_STR=/api/v1`; change them if you set a different prefix.
+
+| Service | URL | Login |
+| --- | --- | --- |
+| API home | <http://api.localhost/api/v1/home/> | — |
+| API docs (Swagger UI) | <http://api.localhost/api/v1/docs> | — |
+| API docs (ReDoc) | <http://api.localhost/api/v1/redoc> | — |
+| OpenAPI schema | <http://api.localhost/api/v1/openapi.json> | — |
+| Health check | <http://api.localhost/health> | — |
+| RabbitMQ management | <http://rabbitmq.localhost/> | `RABBITMQ_USER` / `RABBITMQ_PASSWORD` (default `guest` / `guest`) |
+| Flower (Celery monitoring) | <http://flower.localhost/> | `CELERY_FLOWER_USER` / `CELERY_FLOWER_PASSWORD` |
+| Traefik dashboard | <http://localhost:8080/dashboard/> | — |
+| Mailpit (local inbox) | <http://localhost:8025/> | — |
+
+`*.localhost` hosts go through Traefik on port 80. Every browser resolves them to `127.0.0.1` without any `/etc/hosts` entry, but some command-line tools don't. If Traefik isn't routing, use the direct ports: API <http://localhost:8000/api/v1/home/>, RabbitMQ management <http://localhost:15672/>, Flower <http://localhost:5555/>.
+
+`http://api.localhost/` returns 404 because the app has no route at `/`.
+
+Other services, for database clients and tools rather than the browser:
+
+| Service | Address |
 | --- | --- |
-| API (hot-reload) | `http://api.localhost` · home at `http://api.localhost{API_V1_STR}/home/` (`http://api.localhost/api/v1/home/`) · docs at `http://api.localhost{API_V1_STR}/docs` · health at `http://api.localhost/health` |
-| Traefik dashboard | `http://localhost:8080` |
-| Mailpit web UI | `http://localhost:8025` |
-| Flower (Celery monitoring) | `http://flower.localhost` · log in with `CELERY_FLOWER_USER` / `CELERY_FLOWER_PASSWORD` |
-| RabbitMQ management | `http://rabbitmq.localhost` |
 | PostgreSQL | `localhost:5432` |
 | Redis | `localhost:6379` |
 | RabbitMQ (AMQP) | `localhost:5672` |
+| Mailpit SMTP | `localhost:1025` |
 
 Background services (no URL): `celeryworker` (consumes the `nextgen_tasks` queue) and `celerybeat` (sends periodic tasks, schedule stored in Redis).
-
-The bare `http://api.localhost/` returns 404 because the app has no route at `/`. Use the `{API_V1_STR}` paths above.
 
 #### Health checks
 

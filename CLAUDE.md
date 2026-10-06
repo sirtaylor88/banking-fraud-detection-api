@@ -43,7 +43,13 @@ Compose gotchas:
 - The RabbitMQ healthcheck uses `rabbitmq-diagnostics check_port_connectivity`; `ping` passes before the AMQP listener accepts connections.
 - Traefik routes appear only after containers are running/healthy, so a 404 right after `up` can be transient. A persistent 404 on every `*.localhost` host with routes visible inside the container (`docker compose exec traefik wget -qO- localhost:8080/api/http/routers`) means another process owns host ports 80/8080 — on this machine that was a native `dockerd` in WSL competing with Docker Desktop.
 
-URLs: API → `http://api.localhost{API_V1_STR}/home/` (docs at `{API_V1_STR}/docs`; `/` is 404) | Traefik dashboard → `http://localhost:8080` | Mailpit → `http://localhost:8025` | RabbitMQ management → `http://rabbitmq.localhost` | Flower → `http://flower.localhost` (basic auth)
+Local URLs (with `API_V1_STR=/api/v1`; keep these in sync with the README "Local URLs" table):
+
+- API home → <http://api.localhost/api/v1/home/> · Swagger → <http://api.localhost/api/v1/docs> · ReDoc → <http://api.localhost/api/v1/redoc> · health → <http://api.localhost/health> (`/` is 404)
+- RabbitMQ management → <http://rabbitmq.localhost/> (`guest` / `guest` by default)
+- Flower → <http://flower.localhost/> (basic auth: `CELERY_FLOWER_USER` / `CELERY_FLOWER_PASSWORD`)
+- Traefik dashboard → <http://localhost:8080/dashboard/> · Mailpit → <http://localhost:8025/>
+- Direct ports bypassing Traefik: API `:8000`, RabbitMQ management `:15672`, Flower `:5555`; PostgreSQL `:5432`, Redis `:6379`, AMQP `:5672`, SMTP `:1025`
 
 The external network (`nextgen_local_nw`) must be created before the first `up`. Named volumes: `nextgen_local_db` (PostgreSQL), `nextgen_mailpit_data` (Mailpit), `nextgen_local_logs` (app logs — seeded from image layer to preserve non-root ownership), `nextgen_redis_data` (Redis), `nextgen_rabbitmq_data` (RabbitMQ), `nextgen_flower_data` (Flower database).
 
