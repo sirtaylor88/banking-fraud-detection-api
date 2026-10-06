@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.backend.app.core.db import db_session_factory, init_db
+from src.backend.app.core.db import db_connect_args, db_session_factory, init_db
 from tests.helpers import async_cm
 
 DB = "src.backend.app.core.db"
@@ -80,3 +80,15 @@ async def test_init_db_retries_then_raises() -> None:
 
     assert engine.begin.call_count == 3
     assert [c.args[0] for c in sleep.await_args_list] == [2, 4]
+
+
+@pytest.mark.parametrize(
+    ("schema", "expected"),
+    [
+        ("", {}),
+        ("nextgen", {"server_settings": {"search_path": "nextgen"}}),
+    ],
+)
+def test_db_connect_args(schema: str, expected: dict[str, object]) -> None:
+    """Test that the schema becomes the search_path, not a connect() argument."""
+    assert db_connect_args(schema) == expected

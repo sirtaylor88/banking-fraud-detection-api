@@ -108,7 +108,7 @@ cp src/.envs/.env.example src/.envs/.env.local
 
 `src/.envs/.env.local` is git-ignored. `src/.envs/.env.example` is committed and must be kept in sync with the `Settings` fields in `core/config.py`.
 
-Key vars: `PROJECT_NAME`, `API_V1_STR`, `ENVIRONMENT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_HOST` (= service name in Compose), `POSTGRES_PORT`, `POSTGRES_SCHEMA`, `DATABASE_URL` (assembled from the POSTGRES_* vars), `MAIL_FROM`, `MAIL_FROM_NAME`, `CELERY_FLOWER_USER` / `CELERY_FLOWER_PASSWORD` (read only by `celery/flower/start.sh`, not by `Settings`; required because the script runs with `nounset`). `SMTP_*`, `REDIS_*` and `RABBITMQ_*` default to the Compose values and may be left empty (`env_ignore_empty=True`). Tests get Redis/RabbitMQ values from pytest-env, pointing at `localhost`.
+Key vars: `PROJECT_NAME`, `API_V1_STR`, `ENVIRONMENT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_HOST` (= service name in Compose), `POSTGRES_PORT`, `POSTGRES_SCHEMA` (read by `Settings` and applied as the connection `search_path` via asyncpg `server_settings`), `DATABASE_URL` (assembled from the POSTGRES_* vars; never add query parameters such as `?schema=` — asyncpg rejects unknown `connect()` arguments), `MAIL_FROM`, `MAIL_FROM_NAME`, `CELERY_FLOWER_USER` / `CELERY_FLOWER_PASSWORD` (read only by `celery/flower/start.sh`, not by `Settings`; required because the script runs with `nounset`). `SMTP_*`, `REDIS_*` and `RABBITMQ_*` default to the Compose values and may be left empty (`env_ignore_empty=True`). Tests get Redis/RabbitMQ values from pytest-env, pointing at `localhost`.
 
 ## Code style notes
 
