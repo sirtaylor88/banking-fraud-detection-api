@@ -163,7 +163,7 @@ Other services, for database clients and tools rather than the browser:
 | RabbitMQ (AMQP) | `localhost:5672` |
 | Mailpit SMTP | `localhost:1025` |
 
-Background services (no URL): `celeryworker` (consumes the `nextgen_tasks` queue) and `celerybeat` (sends periodic tasks, schedule stored in Redis).
+Background services (no URL): `celeryworker` (consumes the `nextgen_tasks` queue), `celerybeat` (sends periodic tasks, schedule stored in Redis) and `migrate` (runs `alembic upgrade head` once, then exits; the API and Celery services start only after it succeeds).
 
 #### Health checks
 
@@ -186,7 +186,37 @@ The project root is mounted at `/app` in `api` and in every Celery service, so c
 
 The container keeps its own virtualenv in an anonymous volume at `/app/.venv`. That volume isn't refreshed by `--build`, so after adding or upgrading a dependency, run `up -d --build --renew-anon-volumes`.
 
-Containers run as a non-root `fastapi` user that doesn't own the mounted files. Commands that write into the project, such as `alembic revision`, should be run on the host with `uv run`, not inside a container.
+#### Migrations
+
+Containers run as a non-root `fastapi` user (a system UID) that doesn't own the mounted files, so it can't write new files such as Alembic revisions into the project. Generate revisions in one of two ways.
+
+**On the host** with `uv run`. `postgres-db` only resolves inside Docker, so point Alembic at the published port:
+
+```bash
+POSTGRES_HOST=localhost uv run alembic revision --autogenerate -m "add user table"
+```
+
+**In the container** as your host user, so the new file is owned by you. The image has no `uv`; `alembic` is on `PATH` from `/app/.venv/bin`:
+
+```bash
+docker compose -f docker-compose.local.yml exec --user "$(id -u):$(id -g)" api \
+  alembic revision --autogenerate -m "add user table"
+```
+
+Autogenerate compares the models with the live database (`migrations/env.py` imports every `models.py` via `load_models()`), so PostgreSQL must be running. Review the generated file in `migrations/versions/` before applying it. Files are named `YYYY_MM_DD_HHMMSS_<rev>_<slug>.py` with a UTC timestamp (`file_template` and `timezone` in `alembic.ini`), so they sort in creation order. A post-write hook sorts imports and formats new revisions with ruff. The container has no ruff, so the hook is skipped there: run `uv run ruff check --fix migrations && uv run ruff format migrations` on the host before committing. If `api` is down (for example, a failed migration), replace `exec ... api` with `run --rm --user "$(id -u):$(id -g)" migrate`. Don't use `--user root`: the file would be root-owned on the host.
+
+Apply migrations to the running stack with `docker compose -f docker-compose.local.yml run --rm migrate` (or `POSTGRES_HOST=localhost uv run alembic upgrade head`). Commands that only read, such as `alembic current` or `alembic history`, work with a plain `docker compose -f docker-compose.local.yml exec api alembic ...`.
+
+Roll back a migration with `alembic downgrade`. It doesn't write project files, so no `--user` is needed:
+
+```bash
+docker compose -f docker-compose.local.yml exec api alembic downgrade -1          # undo the last revision
+docker compose -f docker-compose.local.yml exec api alembic downgrade <revision>  # go back to a specific revision
+docker compose -f docker-compose.local.yml exec api alembic downgrade base        # undo every revision
+docker compose -f docker-compose.local.yml exec api alembic current               # check where the database is
+```
+
+If `api` is down, use `run --rm migrate` in place of `exec api` (for example `docker compose -f docker-compose.local.yml run --rm migrate alembic downgrade -1`). On the host, the equivalent is `POSTGRES_HOST=localhost uv run alembic downgrade -1`. The `migrate` service runs `alembic upgrade head` on every `up`, so a rolled-back revision is reapplied at the next start unless you fix or delete its file in `migrations/versions/` first.
 
 #### Troubleshooting
 

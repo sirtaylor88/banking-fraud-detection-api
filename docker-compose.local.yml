@@ -49,6 +49,8 @@ services:
     depends_on:
       postgres-db:
         condition: service_started
+      migrate:
+        condition: service_completed_successfully # schema is up to date before the app starts
       mailpit:
         condition: service_started
       redis:
@@ -57,6 +59,18 @@ services:
         condition: service_healthy # wait until RabbitMQ accepts connections
     networks:
       - nextgen_local_nw
+
+  migrate:
+    <<: *api
+    ports: []
+    labels: [] # Do not inherit the api Traefik labels: no HTTP route for migrations
+    # * One-shot: entrypoint.sh waits for PostgreSQL, then applies pending migrations and exits.
+    # * Rerun after adding a revision: docker compose -f docker-compose.local.yml run --rm migrate
+    command: alembic upgrade head
+    restart: "no"
+    depends_on: # Override: the inherited api depends_on includes migrate itself
+      postgres-db:
+        condition: service_started
 
   mailpit:
     image: docker.io/axllent/mailpit:latest

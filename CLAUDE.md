@@ -29,16 +29,25 @@ docker compose -f docker-compose.local.yml up -d --build --force-recreate       
 docker compose -f docker-compose.local.yml up -d --build --remove-orphans                  # remove containers for removed services
 docker compose -f docker-compose.local.yml up -d --build --force-recreate --remove-orphans # full rebuild
 docker compose -f docker-compose.local.yml up -d --build --renew-anon-volumes              # after changing dependencies (refresh the /app/.venv volume)
+docker compose -f docker-compose.local.yml run --rm migrate                                 # apply new migrations to the running stack
 docker compose -f docker-compose.local.yml down                                             # stop
 docker compose -f docker-compose.local.yml down -v                                          # stop and delete all volumes
 ```
 
-Services: `api` (FastAPI + hot-reload via `start.sh`), `postgres-db`, `traefik` (reverse proxy), `mailpit` (local email), `redis` (Celery result backend + redbeat schedule), `rabbitmq` (Celery broker), `celeryworker`, `celerybeat` (redbeat scheduler), `flower` (Celery monitoring). The Celery services reuse the `api` image via a YAML anchor; their start scripts live in `src/backend/docker/local/fastapi/celery/{worker,beat,flower}/start.sh` and restart on code changes via `watchfiles`.
+Services: `api` (FastAPI + hot-reload via `start.sh`), `postgres-db`, `traefik` (reverse proxy), `mailpit` (local email), `redis` (Celery result backend + redbeat schedule), `rabbitmq` (Celery broker), `celeryworker`, `celerybeat` (redbeat scheduler), `flower` (Celery monitoring), `migrate` (one-shot `alembic upgrade head`). The Celery services and `migrate` reuse the `api` image via a YAML anchor; their start scripts live in `src/backend/docker/local/fastapi/celery/{worker,beat,flower}/start.sh` and restart on code changes via `watchfiles`.
 
-The source is bind-mounted at `/app` (the image WORKDIR) with an anonymous volume over `/app/.venv`, so the container keeps its own virtualenv. Containers run as the non-root `fastapi` user, which does not own the bind-mounted files — run commands that write to the project (e.g. `alembic revision`) on the host with `uv run`, not via `docker compose exec`.
+The source is bind-mounted at `/app` (the image WORKDIR) with an anonymous volume over `/app/.venv`, so the container keeps its own virtualenv. Containers run as the non-root `fastapi` user (a system UID), which cannot write to the bind-mounted files. Commands that write to the project (e.g. `alembic revision`) must run either on the host or in the container as the host user:
+
+```bash
+POSTGRES_HOST=localhost uv run alembic revision --autogenerate -m "..."   # host: service names don't resolve, so override the host
+docker compose -f docker-compose.local.yml exec --user "$(id -u):$(id -g)" api alembic revision --autogenerate -m "..."  # container: no uv in the image, alembic is on PATH
+```
+
+Revision files are named `YYYY_MM_DD_HHMMSS_<rev>_<slug>.py` in UTC (`file_template` + `timezone = UTC` in `alembic.ini`, which needs the `alembic[tz]` extra). A `post_write_hooks` entry runs `ruff check --fix` + `ruff format` on new revisions via `sh`, skipped when ruff is not on PATH (the container), so revisions generated in Docker need `uv run ruff check --fix migrations && uv run ruff format migrations` on the host. `script.py.mako` imports `sqlmodel.sql.sqltypes` explicitly so mypy resolves `AutoString`. Never use `--user root` (files end up root-owned on the host). If `api` is down, use `run --rm --user "$(id -u):$(id -g)" migrate alembic ...` instead of `exec`. Read-only commands (`alembic current`, `history`) work with a plain `exec`. So does rollback (`docker compose -f docker-compose.local.yml exec api alembic downgrade -1`, or `run --rm migrate alembic downgrade -1` if `api` is down). `migrate` runs `alembic upgrade head` on every `up`, so a rolled-back revision is reapplied unless its file is fixed or deleted first.
 
 Compose gotchas:
 
+- `api` (and every service inheriting its `depends_on`) waits for `migrate` with `service_completed_successfully`, so a failed migration keeps the app down — check `docker compose logs migrate`. `migrate` must override `depends_on`, or it would depend on itself. `env.py` creates `POSTGRES_SCHEMA` if missing before migrating
 - Services built from `<<: *api` inherit its Traefik `labels`; non-HTTP services must set `labels: []`, otherwise Traefik load-balances `api.localhost` onto them. Overriding a list key (`volumes`, `labels`) replaces the whole list — YAML anchors cannot be spliced into lists.
 - The RabbitMQ healthcheck uses `rabbitmq-diagnostics check_port_connectivity`; `ping` passes before the AMQP listener accepts connections.
 - Traefik routes appear only after containers are running/healthy, so a 404 right after `up` can be transient. A persistent 404 on every `*.localhost` host with routes visible inside the container (`docker compose exec traefik wget -qO- localhost:8080/api/http/routers`) means another process owns host ports 80/8080 — on this machine that was a native `dockerd` in WSL competing with Docker Desktop.
