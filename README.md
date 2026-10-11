@@ -102,10 +102,7 @@ Fill in `src/.envs/.env.local`:
 | `POSTGRES_USER` | Database user | `postgres` |
 | `POSTGRES_PASSWORD` | Database password | `secret` |
 | `POSTGRES_DB` | Database name | `fraud_db` |
-| `POSTGRES_HOST` | Hostname (service name in Compose) | `postgres-db` |
-| `POSTGRES_PORT` | Database port | `5432` |
 | `POSTGRES_SCHEMA` | Schema used as the connection `search_path` (no hyphens) | `public` |
-| `DATABASE_URL` | Assembled async DSN (auto-composed, no query parameters) | _(leave as-is)_ |
 | `MAIL_FROM` | Sender email address | `noreply@nextgen.local` |
 | `MAIL_FROM_NAME` | Sender display name | `NextGen Bank` |
 | `CELERY_FLOWER_USER` | Flower dashboard username (**required** — `flower` won't start without it) | `admin` |
@@ -115,12 +112,13 @@ These have defaults that match `docker-compose.local.yml`, so you can leave them
 
 | Variable | Default |
 | --- | --- |
+| `POSTGRES_HOST` · `POSTGRES_PORT` | `postgres-db` · `5432` |
 | `SMTP_HOST` · `SMTP_PORT` · `MAILPIT_UI_PORT` | `mailpit` · `1025` · `8025` |
 | `REDIS_HOST` · `REDIS_PORT` · `REDIS_DB` | `redis` · `6379` · `0` |
 | `RABBITMQ_HOST` · `RABBITMQ_PORT` | `rabbitmq` · `5672` |
 | `RABBITMQ_USER` · `RABBITMQ_PASSWORD` | `guest` · `guest` |
 
-The Celery broker URL and the Redis URL (`settings.REDIS_URL`) are built from these values. Don't set them directly.
+The database URL (`settings.DATABASE_URL`), the Celery broker URL and the Redis URL (`settings.REDIS_URL`) are built from these values. Don't set them directly.
 
 ### 3 · Start the full stack
 

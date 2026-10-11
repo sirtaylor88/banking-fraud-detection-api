@@ -1,9 +1,14 @@
 """Application configuration loaded from environment variables."""
 
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import URL
+
+# src/.envs/.env.local, resolved from this file so it loads from any working dir.
+ENV_FILE = Path(__file__).resolve().parents[3] / ".envs" / ".env.local"
 
 
 class Settings(BaseSettings):
@@ -13,7 +18,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: Literal["local", "staging", "production"] = "local"
 
     model_config = SettingsConfigDict(
-        env_file="../../.envs/.env.local",
+        env_file=ENV_FILE,
         env_ignore_empty=True,
         extra="ignore",
     )
@@ -27,8 +32,33 @@ class Settings(BaseSettings):
     SITE_NAME: str = ""
 
     # * Database settings
-    DATABASE_URL: str = ""
+    POSTGRES_USER: str = ""
+    POSTGRES_PASSWORD: str = ""
+    POSTGRES_DB: str = ""
+    POSTGRES_HOST: str = Field(default="postgres-db", min_length=1)
+    POSTGRES_PORT: int = Field(default=5432, ge=1, le=65535)
     POSTGRES_SCHEMA: str = ""  # set as search_path; empty keeps the server default
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def DATABASE_URL(self) -> str:
+        """Build the async database URL from the POSTGRES_* settings.
+
+        The schema is not part of the URL (asyncpg rejects unknown connection
+        parameters); it is applied as ``search_path`` via ``db_connect_args``.
+
+        Returns:
+            str: The DSN, e.g. ``postgresql+asyncpg://user:pass@postgres-db:5432/db``,
+            with the password URL-escaped.
+        """
+        return URL.create(
+            "postgresql+asyncpg",
+            username=self.POSTGRES_USER,
+            password=self.POSTGRES_PASSWORD,
+            host=self.POSTGRES_HOST,
+            port=self.POSTGRES_PORT,
+            database=self.POSTGRES_DB,
+        ).render_as_string(hide_password=False)
 
     # ! Important: For the SMTP, redis and RabbitMQ hosts, use same service names
     # ! declared as in docker-compose.yml
