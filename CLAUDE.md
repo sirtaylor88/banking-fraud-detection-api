@@ -70,7 +70,7 @@ The external network (`nextgen_local_nw`) must be created before the first `up`.
 uv run ruff check .          # Lint (isort, pylint and pydocstyle rules)
 uv run ruff format .         # Format
 uv run mypy .                # Type checking
-uv run bandit -r src/        # Security scan
+uv run bandit -c pyproject.toml -r src/  # Security scan (skips tests/ folders)
 ```
 
 ## Testing
@@ -85,6 +85,7 @@ Test environment variables are set via `pytest-env` in `[tool.pytest.ini_options
 
 Test conventions:
 
+- Tests for a package live next to it in `<package>/tests/` (with an `__init__.py`, e.g. `src/backend/app/auth/tests/test_utils.py`); `tests/` holds tests for `core/`, `main.py` and shared helpers. Both are collected (`testpaths = ["tests", "src"]`); `tests/` folders are excluded from coverage (`[tool.coverage.run] omit`), bandit (`[tool.bandit] exclude_dirs`, hence `bandit -c pyproject.toml`) and the ruff `D`/`PLR2004` rules (`**/tests/**`)
 - Tests mock every external service (database, Redis, Celery); none need running services. Shared helpers go in `tests/helpers.py` (e.g. `async_cm()` for async context manager mocks)
 - Use `pytest.mark.parametrize` for variants of the same scenario. Pass mock kwargs (`{"side_effect": ...}`) rather than mock instances, which would be shared across cases
 - Name fixtures as `@pytest.fixture(name="x")` on `def fixture_x()`, and use `@pytest.mark.usefixtures(...)` when the value is unused, so fixture names never shadow test parameters and unused fixtures are not passed as arguments

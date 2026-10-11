@@ -267,7 +267,7 @@ If `api` is down, use `run --rm migrate` in place of `exec api` (for example `do
 uv run ruff check .       # Lint (isort, pylint, pydocstyle rules)
 uv run ruff format .      # Formatting
 uv run mypy .             # Type checking
-uv run bandit -r src/     # Security scan
+uv run bandit -c pyproject.toml -r src/  # Security scan (skips tests/ folders)
 ```
 
 ### Testing

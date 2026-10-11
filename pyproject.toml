@@ -48,9 +48,10 @@ line-length = 88
 select = ["I", "PL", "D"] # isort + pylint + pydocstyle rules
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = [
+# * Top-level tests/ and per-package tests/ folders (e.g. src/backend/app/auth/tests/)
+"**/tests/**" = [
     "PLR2004", # magic values are fine in test assertions
-    "D",       # docstrings are only enforced in src/
+    "D",       # docstrings are only enforced in application code
 ]
 "migrations/**" = ["D"]
 
@@ -61,7 +62,7 @@ convention = "google"
 force-sort-within-sections = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "src"] # tests/ plus per-package tests/ folders under src/
 anyio_mode = "auto"
 env = [
     "PROJECT_NAME=NextGen Bank - FastAPI",
@@ -81,3 +82,9 @@ env = [
     "RABBITMQ_USER=guest",
     "RABBITMQ_PASSWORD=guest",
 ]
+
+[tool.coverage.run]
+omit = ["*/tests/*"] # per-package tests live under src/ but are not application code
+
+[tool.bandit]
+exclude_dirs = ["tests"] # asserts and dummy passwords are expected in tests
