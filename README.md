@@ -134,6 +134,32 @@ docker compose -f docker-compose.local.yml down                                 
 docker compose -f docker-compose.local.yml down -v                                     # stop and delete volumes
 ```
 
+#### Make shortcuts
+
+The `Makefile` wraps the common commands and builds the image with your UID/GID (see [Hot reload](#hot-reload)):
+
+| Command | What it does |
+| --- | --- |
+| `make build` | Build and start the stack, removing orphan containers |
+| `make up` / `make down` | Start / stop the stack |
+| `make down-v` | Stop and delete volumes (database included) |
+| `make clean-data` | Stop the app services and delete logs and Flower history |
+| `make nextgen-config` | Print the resolved Compose config |
+| `make makemigrations name="..."` | Generate an Alembic revision, then sort and format it with ruff |
+| `make migrate` / `make downgrade version=-1` | Apply / roll back migrations |
+| `make history` / `make current-migration` | Show the revision history / the current revision |
+| `make psql` | Open `psql` with `POSTGRES_USER` / `POSTGRES_DB` from `.env.local` |
+| `make inspect-network` | Inspect the `nextgen_local_nw` network |
+
+Add `-n` (dry run) to print the commands a target would run without running them. This is useful before destructive targets such as `clean-data` or `down-v`, and to check how variables expand:
+
+```bash
+make -n clean-data
+make -n makemigrations name="add user table"
+```
+
+`make -n` still evaluates the `$(shell id -u)` / `$(shell id -g)` assignments at the top of the `Makefile`, but runs nothing from the target's recipe.
+
 #### Local URLs
 
 Open these in a browser once the stack is up. API paths use `API_V1_STR=/api/v1`; change them if you set a different prefix.
@@ -188,9 +214,9 @@ The container keeps its own virtualenv in an anonymous volume at `/app/.venv`. T
 
 Linux tracks file ownership by number, not by name: every user has a user ID (UID) and a group ID (GID), shown by `id` (e.g. `uid=1000(you) gid=1000(you)`). A bind mount doesn't translate owners, so the kernel compares only these numbers. 0 is root, 1–999 are reserved for system accounts, and the first normal user on most Linux distributions (including Ubuntu on WSL) gets `1000`. macOS often starts at `501`.
 
-The image creates the `fastapi` user with UID/GID `1000`. Inside the container the name is `fastapi`, but to the kernel it is the same user as you, so it can write to the mounted project and the files it creates (such as Alembic revisions) are owned by you on the host. With a different number, such as the system UID it had before, it couldn't write there. The default is `1000`; if `id -u` or `id -g` prints something else, build with `APP_UID=$(id -u) APP_GID=$(id -g) docker compose -f docker-compose.local.yml up -d --build --renew-anon-volumes`.
+The image creates the `fastapi` user with UID/GID `1000`. Inside the container the name is `fastapi`, but to the kernel it is the same user as you, so it can write to the mounted project and the files it creates (such as Alembic revisions) are owned by you on the host. With a different number, such as the system UID it had before, it couldn't write there. `make build` passes your own `id -u` / `id -g` automatically. With plain `docker compose`, the default is `1000`; if yours differ, build with `APP_UID=$(id -u) APP_GID=$(id -g) docker compose -f docker-compose.local.yml up -d --build --renew-anon-volumes`.
 
-Everything the app containers write lands in the mounted project, so it is always owned by you: app logs in `src/backend/app/logs/` and Flower's task history in `.flower/` (both git-ignored). `down -v` doesn't clear them; stop the app services and delete the folders instead.
+Everything the app containers write lands in the mounted project, so it is always owned by you: app logs in `src/backend/app/logs/` and Flower's task history in `.flower/` (both git-ignored). `down -v` doesn't clear them; run `make clean-data` instead (it stops the app services first, then `make up` restarts them).
 
 #### Migrations
 
@@ -202,13 +228,15 @@ Containers run as a non-root `fastapi` user with your UID/GID (`APP_UID`/`APP_GI
 POSTGRES_HOST=localhost uv run alembic revision --autogenerate -m "add user table"
 ```
 
-**In the container**:
+**In the container** with `make`:
 
 ```bash
-docker compose -f docker-compose.local.yml exec api alembic revision --autogenerate -m "add user table"
+make makemigrations name="add user table"
 ```
 
-Autogenerate compares the models with the live database (`migrations/env.py` imports every `models.py` via `load_models()`), so PostgreSQL must be running. Review the generated file in `migrations/versions/` before applying it. Files are named `YYYY_MM_DD_HHMMSS_<rev>_<slug>.py` with a UTC timestamp (`file_template` and `timezone` in `alembic.ini`), so they sort in creation order. A post-write hook sorts imports and formats new revisions with ruff. The container has no ruff, so the hook is skipped there: run `uv run ruff check --fix migrations && uv run ruff format migrations` on the host afterwards.
+It runs `alembic revision` in the `api` container, then sorts and formats the file with ruff on the host.
+
+Autogenerate compares the models with the live database (`migrations/env.py` imports every `models.py` via `load_models()`), so PostgreSQL must be running. Review the generated file in `migrations/versions/` before applying it. Files are named `YYYY_MM_DD_HHMMSS_<rev>_<slug>.py` with a UTC timestamp (`file_template` and `timezone` in `alembic.ini`), so they sort in creation order. A post-write hook sorts imports and formats new revisions with ruff. The container has no ruff, so the hook is skipped there; `make makemigrations` runs ruff on the host afterwards.
 
 Apply migrations to the running stack with `docker compose -f docker-compose.local.yml run --rm migrate` (or `POSTGRES_HOST=localhost uv run alembic upgrade head`). Commands that only read, such as `alembic current` or `alembic history`, work with a plain `docker compose -f docker-compose.local.yml exec api alembic ...`.
 
