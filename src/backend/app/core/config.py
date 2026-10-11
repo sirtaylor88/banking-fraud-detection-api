@@ -75,6 +75,11 @@ class Settings(BaseSettings):
     REDIS_PORT: int = Field(default=6379, ge=1, le=65535)
     REDIS_DB: int = Field(default=0, ge=0, le=15)  # Redis has 16 DBs by default
 
+    # * Auth
+    OTP_EXPIRATION_MINUTES: int = 2 if ENVIRONMENT == "local" else 5
+    LOGIN_ATTEMPTS: int = 3
+    LOCKOUT_DURATION_IN_MINUTES: int = 2 if ENVIRONMENT == "local" else 5
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def REDIS_URL(self) -> str:

@@ -18,6 +18,7 @@ from src.backend.app.core.constants import (
     DB_POOL_TIMEOUT,
 )
 from src.backend.app.core.logging import get_logger
+from src.backend.app.core.model_registry import load_models
 
 logger = get_logger()
 
@@ -95,6 +96,9 @@ async def db_session_factory() -> AsyncGenerator[AsyncSession, None]:
 async def init_db() -> None:
     """Init the database."""
     try:
+        load_models()
+        logger.info("Models loaded successfully")
+
         for attempt in range(DB_INIT_MAX_RETRIES):
             try:
                 async with engine.begin() as conn:
