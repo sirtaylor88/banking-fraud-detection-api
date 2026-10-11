@@ -20,6 +20,11 @@ services:
     build:
       context: .
       dockerfile: ./src/backend/docker/local/fastapi/Dockerfile
+      args:
+        # * Match the host user so containers can write to the bind-mounted source.
+        # * Override when your UID/GID is not 1000: APP_UID=$(id -u) APP_GID=$(id -g) docker compose ...
+        APP_UID: ${APP_UID:-1000}
+        APP_GID: ${APP_GID:-1000}
     volumes:
       # * Mount source code over the image's WORKDIR (/app) for hot-reload
       # * (fastapi dev --reload and the watchfiles-based Celery scripts watch /app/src)
@@ -28,10 +33,8 @@ services:
       # * the image only when created: after changing dependencies, rebuild with
       # * `up -d --build --renew-anon-volumes` to pick up the new .venv.
       - /app/.venv
-      # * Named volume for logs — Docker seeds it from the image layer on first use, preserving
-      # * the fastapi-user ownership set by the Dockerfile. A bind mount would be created by
-      # * Docker as root on the host, making the directory unwritable by the non-root container user.
-      - nextgen_local_logs:/app/src/backend/app/logs
+      # * Logs (src/backend/app/logs) and the Flower database (.flower/) are written into the
+      # * bind-mounted project, owned by the host user like every other file (see APP_UID).
     ports:
       - "8000:8000" # Expose the FastAPI app on port 8000
     env_file:
@@ -148,11 +151,6 @@ services:
     <<: *api
     ports:
       - "5555:5555" # Expose Flower monitoring UI on port 5555
-    volumes: # Overriding replaces the whole list, so repeat the api mounts
-      - .:/app
-      - /app/.venv
-      - nextgen_local_logs:/app/src/backend/app/logs
-      - nextgen_flower_data:/flower_data # Persist Flower database (see start-flower.sh)
     command: /start-flower.sh # Overrides CMD; runs Flower monitoring (see start-flower.sh)
     labels:
       - "traefik.enable=true"
@@ -174,7 +172,5 @@ networks:
 volumes:
   nextgen_local_db:      # PostgreSQL data
   nextgen_mailpit_data:  # Mailpit email storage
-  nextgen_local_logs:    # App log files (fastapi-user owned, seeded from image layer)
   nextgen_redis_data:    # Redis data (Celery results, redbeat schedule)
   nextgen_rabbitmq_data: # RabbitMQ data
-  nextgen_flower_data:   # Flower monitoring data

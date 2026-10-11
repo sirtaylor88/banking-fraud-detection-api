@@ -48,6 +48,10 @@ FROM python AS python-run-stage
 ARG APP_HOME=/app
 ARG APP_USER=fastapi
 ARG APP_GROUP=fastapi
+# * UID/GID of the host user that owns the bind-mounted source, so the app user can write
+# * to it (e.g. alembic revisions). Passed from docker-compose (APP_UID / APP_GID).
+ARG APP_UID=1000
+ARG APP_GID=1000
 
 WORKDIR ${APP_HOME}
 
@@ -63,9 +67,10 @@ RUN apt-get update && apt-get install -y \
     # * Cleanup build dependencies and remove apt cache to reduce image size
     && apt-get purge -y --autoremove -o APT::AutoRemove::RecommendsImportant=false \
     && rm -rf /var/lib/apt/lists/* \
-    # * Create a non-root user to run the application for security reasons
-    && groupadd -r ${APP_GROUP} \
-    && useradd -r -g ${APP_GROUP} -d ${APP_HOME} -m ${APP_USER}
+    # * Create a non-root user to run the application for security reasons, with the host
+    # * user's UID/GID (-o tolerates a GID already used by a system group, e.g. 20 on macOS)
+    && groupadd -o -g ${APP_GID} ${APP_GROUP} \
+    && useradd -o -u ${APP_UID} -g ${APP_GROUP} -d ${APP_HOME} -m ${APP_USER}
 
 # * Copy only the pre-built virtualenv from the build stage, not uv or build deps.
 # * --chown ensures the app user owns the venv — without this it lands as root-owned
@@ -92,17 +97,6 @@ RUN sed -i 's/\r$//g' /entrypoint.sh /start.sh /start-celerybeat.sh /start-celer
 
 # * Copy the application code into the image and set ownership to the app user
 COPY --chown=${APP_USER}:${APP_GROUP} . ${APP_HOME}
-
-# * Create the logs directory AFTER the final COPY so Docker does not reset its ownership.
-# * COPY recreates intermediate directories (src/backend/app/) as root — any mkdir done
-# * before COPY would have its parent ownership overwritten. Running mkdir here guarantees
-# * the app user can write log files at runtime.
-# * /flower_data holds the Flower database, outside APP_HOME so the source bind mount
-# * does not hide it. The nextgen_flower_data named volume is seeded from it on first
-# * use, inheriting the app user ownership so Flower can write its database.
-RUN mkdir -p ${APP_HOME}/src/backend/app/logs /flower_data && \
-    chmod 755 ${APP_HOME}/src/backend/app/logs && \
-    chown -R ${APP_USER}:${APP_GROUP} ${APP_HOME}/src/backend/app/logs /flower_data
 
 # * Switch to non-root user before starting the process
 USER ${APP_USER}

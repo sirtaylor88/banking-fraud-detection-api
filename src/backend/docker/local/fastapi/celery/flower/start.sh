@@ -17,9 +17,12 @@ set -o pipefail
 # * `--address=0.0.0.0`: bind to all interfaces so the port is reachable from outside
 # * the container.
 # * `--port=5555`: must match the EXPOSE directive and the docker-compose port mapping.
-# * `--persistent=True --db=...`: keep task history in the nextgen_flower_data volume
-# * across restarts.
+# * `--persistent=True --db=...`: keep task history across restarts in .flower/ inside the
+# * bind-mounted project (git-ignored, owned by the host user).
 # * `--basic-auth`: protect the dashboard with HTTP basic authentication.
+# * Flower does not create the database directory itself.
+mkdir -p .flower
+
 FLOWER_CMD=(
     celery
     -A src.backend.app.core.celery_app
@@ -27,7 +30,7 @@ FLOWER_CMD=(
     --address=0.0.0.0
     --port=5555
     --persistent=True
-    --db=/flower_data/flower.db
+    --db=.flower/flower.db
     "--basic-auth=${CELERY_FLOWER_USER}:${CELERY_FLOWER_PASSWORD}"
 )
 

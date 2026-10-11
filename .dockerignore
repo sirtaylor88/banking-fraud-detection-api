@@ -41,8 +41,9 @@ htmlcov
 .vscode
 .idea
 
-# Logs — generated at runtime, not needed in the image
+# Logs and Flower history — generated at runtime, not needed in the image
 src/backend/app/logs
+.flower
 
 # Docker config files — not needed inside the container.
 # Only Dockerfiles and compose files are excluded; entrypoint/start scripts must

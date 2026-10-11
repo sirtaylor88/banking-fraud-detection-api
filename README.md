@@ -186,9 +186,15 @@ The project root is mounted at `/app` in `api` and in every Celery service, so c
 
 The container keeps its own virtualenv in an anonymous volume at `/app/.venv`. That volume isn't refreshed by `--build`, so after adding or upgrading a dependency, run `up -d --build --renew-anon-volumes`.
 
+Linux tracks file ownership by number, not by name: every user has a user ID (UID) and a group ID (GID), shown by `id` (e.g. `uid=1000(you) gid=1000(you)`). A bind mount doesn't translate owners, so the kernel compares only these numbers. 0 is root, 1–999 are reserved for system accounts, and the first normal user on most Linux distributions (including Ubuntu on WSL) gets `1000`. macOS often starts at `501`.
+
+The image creates the `fastapi` user with UID/GID `1000`. Inside the container the name is `fastapi`, but to the kernel it is the same user as you, so it can write to the mounted project and the files it creates (such as Alembic revisions) are owned by you on the host. With a different number, such as the system UID it had before, it couldn't write there. The default is `1000`; if `id -u` or `id -g` prints something else, build with `APP_UID=$(id -u) APP_GID=$(id -g) docker compose -f docker-compose.local.yml up -d --build --renew-anon-volumes`.
+
+Everything the app containers write lands in the mounted project, so it is always owned by you: app logs in `src/backend/app/logs/` and Flower's task history in `.flower/` (both git-ignored). `down -v` doesn't clear them; stop the app services and delete the folders instead.
+
 #### Migrations
 
-Containers run as a non-root `fastapi` user (a system UID) that doesn't own the mounted files, so it can't write new files such as Alembic revisions into the project. Generate revisions in one of two ways.
+Containers run as a non-root `fastapi` user with your UID/GID (`APP_UID`/`APP_GID`, default `1000`), so they can write into the mounted project and files they create belong to you. Generate revisions in one of two ways.
 
 **On the host** with `uv run`. `postgres-db` only resolves inside Docker, so point Alembic at the published port:
 
@@ -196,18 +202,17 @@ Containers run as a non-root `fastapi` user (a system UID) that doesn't own the 
 POSTGRES_HOST=localhost uv run alembic revision --autogenerate -m "add user table"
 ```
 
-**In the container** as your host user, so the new file is owned by you. The image has no `uv`; `alembic` is on `PATH` from `/app/.venv/bin`:
+**In the container**:
 
 ```bash
-docker compose -f docker-compose.local.yml exec --user "$(id -u):$(id -g)" api \
-  alembic revision --autogenerate -m "add user table"
+docker compose -f docker-compose.local.yml exec api alembic revision --autogenerate -m "add user table"
 ```
 
-Autogenerate compares the models with the live database (`migrations/env.py` imports every `models.py` via `load_models()`), so PostgreSQL must be running. Review the generated file in `migrations/versions/` before applying it. Files are named `YYYY_MM_DD_HHMMSS_<rev>_<slug>.py` with a UTC timestamp (`file_template` and `timezone` in `alembic.ini`), so they sort in creation order. A post-write hook sorts imports and formats new revisions with ruff. The container has no ruff, so the hook is skipped there: run `uv run ruff check --fix migrations && uv run ruff format migrations` on the host before committing. If `api` is down (for example, a failed migration), replace `exec ... api` with `run --rm --user "$(id -u):$(id -g)" migrate`. Don't use `--user root`: the file would be root-owned on the host.
+Autogenerate compares the models with the live database (`migrations/env.py` imports every `models.py` via `load_models()`), so PostgreSQL must be running. Review the generated file in `migrations/versions/` before applying it. Files are named `YYYY_MM_DD_HHMMSS_<rev>_<slug>.py` with a UTC timestamp (`file_template` and `timezone` in `alembic.ini`), so they sort in creation order. A post-write hook sorts imports and formats new revisions with ruff. The container has no ruff, so the hook is skipped there: run `uv run ruff check --fix migrations && uv run ruff format migrations` on the host afterwards.
 
 Apply migrations to the running stack with `docker compose -f docker-compose.local.yml run --rm migrate` (or `POSTGRES_HOST=localhost uv run alembic upgrade head`). Commands that only read, such as `alembic current` or `alembic history`, work with a plain `docker compose -f docker-compose.local.yml exec api alembic ...`.
 
-Roll back a migration with `alembic downgrade`. It doesn't write project files, so no `--user` is needed:
+Roll back a migration with `alembic downgrade`:
 
 ```bash
 docker compose -f docker-compose.local.yml exec api alembic downgrade -1          # undo the last revision

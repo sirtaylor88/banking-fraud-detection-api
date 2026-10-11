@@ -34,16 +34,14 @@ docker compose -f docker-compose.local.yml down                                 
 docker compose -f docker-compose.local.yml down -v                                          # stop and delete all volumes
 ```
 
-Services: `api` (FastAPI + hot-reload via `start.sh`), `postgres-db`, `traefik` (reverse proxy), `mailpit` (local email), `redis` (Celery result backend + redbeat schedule), `rabbitmq` (Celery broker), `celeryworker`, `celerybeat` (redbeat scheduler), `flower` (Celery monitoring), `migrate` (one-shot `alembic upgrade head`). The Celery services and `migrate` reuse the `api` image via a YAML anchor; their start scripts live in `src/backend/docker/local/fastapi/celery/{worker,beat,flower}/start.sh` and restart on code changes via `watchfiles`.
-
-The source is bind-mounted at `/app` (the image WORKDIR) with an anonymous volume over `/app/.venv`, so the container keeps its own virtualenv. Containers run as the non-root `fastapi` user (a system UID), which cannot write to the bind-mounted files. Commands that write to the project (e.g. `alembic revision`) must run either on the host or in the container as the host user:
+The source is bind-mounted at `/app` (the image WORKDIR) with an anonymous volume over `/app/.venv`, so the container keeps its own virtualenv. Containers run as the non-root `fastapi` user, created with the host user's UID/GID (`APP_UID`/`APP_GID` build args, default `1000`; override with `APP_UID=$(id -u) APP_GID=$(id -g) docker compose ... build` if yours differ), so containers can write to the bind-mounted source and files they create are owned by the host user. Bind mounts compare numeric IDs only; `1000` is the first normal user on most Linux distros (system accounts use 1–999, which is what `useradd -r` picked before and why the container could not write `migrations/`). Generate revisions on the host or in the container:
 
 ```bash
 POSTGRES_HOST=localhost uv run alembic revision --autogenerate -m "..."   # host: service names don't resolve, so override the host
-docker compose -f docker-compose.local.yml exec --user "$(id -u):$(id -g)" api alembic revision --autogenerate -m "..."  # container: no uv in the image, alembic is on PATH
+docker compose -f docker-compose.local.yml exec api alembic revision --autogenerate -m "..."  # container: no uv in the image, alembic is on PATH
 ```
 
-Revision files are named `YYYY_MM_DD_HHMMSS_<rev>_<slug>.py` in UTC (`file_template` + `timezone = UTC` in `alembic.ini`, which needs the `alembic[tz]` extra). A `post_write_hooks` entry runs `ruff check --fix` + `ruff format` on new revisions via `sh`, skipped when ruff is not on PATH (the container), so revisions generated in Docker need `uv run ruff check --fix migrations && uv run ruff format migrations` on the host. `script.py.mako` imports `sqlmodel.sql.sqltypes` explicitly so mypy resolves `AutoString`. Never use `--user root` (files end up root-owned on the host). If `api` is down, use `run --rm --user "$(id -u):$(id -g)" migrate alembic ...` instead of `exec`. Read-only commands (`alembic current`, `history`) work with a plain `exec`. So does rollback (`docker compose -f docker-compose.local.yml exec api alembic downgrade -1`, or `run --rm migrate alembic downgrade -1` if `api` is down). `migrate` runs `alembic upgrade head` on every `up`, so a rolled-back revision is reapplied unless its file is fixed or deleted first.
+Revision files are named `YYYY_MM_DD_HHMMSS_<rev>_<slug>.py` in UTC (`file_template` + `timezone = UTC` in `alembic.ini`, which needs the `alembic[tz]` extra). A `post_write_hooks` entry runs `ruff check --fix` + `ruff format` on new revisions via `sh`, skipped when ruff is not on PATH (the container), so revisions generated in Docker need `uv run ruff check --fix migrations && uv run ruff format migrations` on the host. `script.py.mako` imports `sqlmodel.sql.sqltypes` explicitly so mypy resolves `AutoString`. Rollback works the same way (`docker compose -f docker-compose.local.yml exec api alembic downgrade -1`, or `run --rm migrate alembic downgrade -1` if `api` is down). `migrate` runs `alembic upgrade head` on every `up`, so a rolled-back revision is reapplied unless its file is fixed or deleted first.
 
 Compose gotchas:
 
@@ -60,7 +58,7 @@ Local URLs (with `API_V1_STR=/api/v1`; keep these in sync with the README "Local
 - Traefik dashboard → <http://localhost:8080/dashboard/> · Mailpit → <http://localhost:8025/>
 - Direct ports bypassing Traefik: API `:8000`, RabbitMQ management `:15672`, Flower `:5555`; PostgreSQL `:5432`, Redis `:6379`, AMQP `:5672`, SMTP `:1025`
 
-The external network (`nextgen_local_nw`) must be created before the first `up`. Named volumes: `nextgen_local_db` (PostgreSQL), `nextgen_mailpit_data` (Mailpit), `nextgen_local_logs` (app logs — seeded from image layer to preserve non-root ownership), `nextgen_redis_data` (Redis), `nextgen_rabbitmq_data` (RabbitMQ), `nextgen_flower_data` (Flower database).
+The external network (`nextgen_local_nw`) must be created before the first `up`. Named volumes: `nextgen_local_db` (PostgreSQL), `nextgen_mailpit_data` (Mailpit), `nextgen_redis_data` (Redis), `nextgen_rabbitmq_data` (RabbitMQ). App containers deliberately have no named volumes (only the anonymous `/app/.venv`): a named volume keeps the owner it was created with, which breaks when `APP_UID` changes. App logs go to the bind-mounted `src/backend/app/logs/` and the Flower DB to `.flower/flower.db` (created by `start-flower.sh`), both git-ignored and host-owned; `down -v` does not clear them; stop the app services before deleting them (they hold the files open).
 
 ## Linting and type checking
 
