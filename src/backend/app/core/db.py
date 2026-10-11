@@ -76,7 +76,7 @@ async def db_session_factory() -> AsyncGenerator[AsyncSession, None]:
                     logger.info(
                         "Successfully rolled back the database session after error."
                     )
-                except Exception as rollback_error:  # pylint: disable=broad-exception-caught
+                except Exception as rollback_error:
                     logger.error(
                         f"Error during database session rollback: {rollback_error}"
                     )
@@ -88,7 +88,7 @@ async def db_session_factory() -> AsyncGenerator[AsyncSession, None]:
                 try:
                     await session.close()
                     logger.debug("Database session closed successfully!")
-                except Exception as close_err:  # pylint: disable=broad-exception-caught
+                except Exception as close_err:
                     logger.error(f"Error closing database session: {close_err}")
 
 
@@ -103,7 +103,7 @@ async def init_db() -> None:
                 logger.info("Database connection verified successfully!")
                 break
 
-            except Exception:  # pylint: disable=broad-exception-caught
+            except Exception:
                 if attempt == DB_INIT_MAX_RETRIES - 1:
                     logger.error(
                         "Failed to verify database connection after "

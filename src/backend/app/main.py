@@ -111,7 +111,7 @@ async def health_check() -> JSONResponse:
 
         return JSONResponse(content=health_status, status_code=status_code)
 
-    except Exception as err:  # pylint: disable=broad-exception-caught
+    except Exception as err:
         logger.error(f"Health check failed: {err}")
         return JSONResponse(
             content={"status": ServiceStatus.UNHEALTHY, "error": str(err)},

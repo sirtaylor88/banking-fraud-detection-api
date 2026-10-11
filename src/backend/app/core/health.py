@@ -91,7 +91,7 @@ class HealthCheck:
                     f"Dependency `{dep}` not registered for service `{service_name}`"
                 )
 
-    async def add_service(  # pylint: disable=too-many-arguments
+    async def add_service(  # noqa: PLR0913
         self,
         service_name: str,
         check_function: Callable[[], Awaitable[bool]],
@@ -147,7 +147,7 @@ class HealthCheck:
             logger.debug("Database health check passed.")
             return True
 
-        except Exception as err:  # pylint: disable=broad-exception-caught
+        except Exception as err:
             logger.error(f"Database health check failed: {err}")
             return False
 
@@ -164,7 +164,7 @@ class HealthCheck:
             self._last_check["redis"] = _now()
             return True
 
-        except Exception as err:  # pylint: disable=broad-exception-caught
+        except Exception as err:
             logger.error(f"Redis health check failed: {err}")
             return False
 
@@ -187,7 +187,7 @@ class HealthCheck:
             self._last_check["celery"] = _now()
             return True
 
-        except Exception as err:  # pylint: disable=broad-exception-caught
+        except Exception as err:
             logger.error(f"Celery health check failed: {err}")
             return False
 
@@ -245,7 +245,7 @@ class HealthCheck:
             return "Check returned unhealthy."
         except TimeoutError:
             return f"Timeout after {config.timeout}s."
-        except Exception as err:  # pylint: disable=broad-exception-caught
+        except Exception as err:
             return str(err)
 
     async def check_service_health(

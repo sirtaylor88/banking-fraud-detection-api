@@ -30,8 +30,6 @@ dev = [
     "celery-types>=0.26.0",
     "mypy>=2.1.0",
     "pre-commit>=4.6.0",
-    "pydocstyle>=6.3.0",
-    "pylint>=4.0.5",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
     "pytest-env>=1.6.0",
@@ -47,7 +45,17 @@ dev = [
 line-length = 88
 
 [tool.ruff.lint]
-select = ["I"]
+select = ["I", "PL", "D"] # isort + pylint + pydocstyle rules
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    "PLR2004", # magic values are fine in test assertions
+    "D",       # docstrings are only enforced in src/
+]
+"migrations/**" = ["D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
 [tool.ruff.lint.isort]
 force-sort-within-sections = true
@@ -69,6 +77,3 @@ env = [
     "RABBITMQ_USER=guest",
     "RABBITMQ_PASSWORD=guest",
 ]
-
-[tool.pylint.messages_control]
-disable = ["too-few-public-methods", "duplicate-code"]

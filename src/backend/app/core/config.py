@@ -47,7 +47,7 @@ class Settings(BaseSettings):
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def REDIS_URL(self) -> str:  # pylint: disable=invalid-name
+    def REDIS_URL(self) -> str:
         """Build the Redis connection URL from the REDIS_* settings.
 
         Returns:

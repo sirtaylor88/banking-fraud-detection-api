@@ -213,7 +213,7 @@ async def test_check_all_services_bypasses_expired_cache(
 
     await checker.check_all_services()
     await checker.check_all_services(use_cache=False)
-    checker._cache_duration = timedelta(0)  # pylint: disable=protected-access
+    checker._cache_duration = timedelta(0)
     await checker.check_all_services()
 
     assert check.await_count == 3

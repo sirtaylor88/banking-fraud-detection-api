@@ -203,9 +203,8 @@ Containers run as a non-root `fastapi` user that doesn't own the mounted files. 
 ### Linting & type checking
 
 ```bash
-uv run ruff check .       # Import sorting
+uv run ruff check .       # Lint (isort, pylint, pydocstyle rules)
 uv run ruff format .      # Formatting
-uv run pylint src/        # Style / quality
 uv run mypy .             # Type checking
 uv run bandit -r src/     # Security scan
 ```
@@ -229,4 +228,4 @@ uv run pre-commit install          # Install hooks
 uv run pre-commit run --all-files  # Run manually
 ```
 
-Hooks: `ruff` · `ruff-format` · `pylint` · `mypy` · `pydocstyle` (Google) · `bandit` · `sphinx-lint` · `pytest` (100% coverage)
+Hooks: `ruff` (isort, pylint, pydocstyle Google rules) · `ruff-format` · `mypy` · `bandit` · `sphinx-lint` · `pytest` (100% coverage)

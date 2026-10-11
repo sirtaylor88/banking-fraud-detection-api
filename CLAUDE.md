@@ -56,9 +56,8 @@ The external network (`nextgen_local_nw`) must be created before the first `up`.
 ## Linting and type checking
 
 ```bash
-uv run ruff check .          # Lint (import sorting only)
+uv run ruff check .          # Lint (isort, pylint and pydocstyle rules)
 uv run ruff format .         # Format
-uv run pylint src/           # Style/quality lint
 uv run mypy .                # Type checking
 uv run bandit -r src/        # Security scan
 ```
@@ -77,12 +76,12 @@ Test conventions:
 
 - Tests mock every external service (database, Redis, Celery); none need running services. Shared helpers go in `tests/helpers.py` (e.g. `async_cm()` for async context manager mocks)
 - Use `pytest.mark.parametrize` for variants of the same scenario. Pass mock kwargs (`{"side_effect": ...}`) rather than mock instances, which would be shared across cases
-- Name fixtures as `@pytest.fixture(name="x")` on `def fixture_x()`, and use `@pytest.mark.usefixtures(...)` when the value is unused. The pylint pre-commit hook lints staged test files, so this avoids `redefined-outer-name` / `unused-argument`
+- Name fixtures as `@pytest.fixture(name="x")` on `def fixture_x()`, and use `@pytest.mark.usefixtures(...)` when the value is unused, so fixture names never shadow test parameters and unused fixtures are not passed as arguments
 - Build exceptions and mocks before a `pytest.raises` block so it contains only one call that can raise
 
 ## Pre-commit hooks
 
-Pre-commit runs ruff, ruff-format, pylint, mypy, pydocstyle (Google convention), bandit, sphinx-lint, and pytest with 100% coverage. Install hooks with:
+Pre-commit runs ruff (including pydocstyle `D` rules, Google convention), ruff-format, mypy, bandit, sphinx-lint, and pytest with 100% coverage. Install hooks with:
 
 ```bash
 uv run pre-commit install
@@ -118,7 +117,7 @@ Key vars: `PROJECT_NAME`, `API_V1_STR`, `ENVIRONMENT`, `POSTGRES_USER`, `POSTGRE
 
 ## Code style notes
 
-- Ruff is configured for import sorting only (`select = ["I"]`); pylint handles broader quality checks with `too-few-public-methods` and `duplicate-code` disabled
-- All public modules, packages, classes, and functions require docstrings (pydocstyle Google convention)
+- Ruff is the only linter: `select = ["I", "PL", "D"]` (isort, pylint and pydocstyle rules); magic values (`PLR2004`) are allowed in `tests/`
+- All public modules, packages, classes, and functions require docstrings (ruff `D` rules, Google convention; not enforced in `tests/` or `migrations/`)
 - Use `TYPE_CHECKING` guards for type-only imports to avoid runtime import errors
 - Use `pathlib.Path` over `os.path` for filesystem operations

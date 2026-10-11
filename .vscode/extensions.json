@@ -11,7 +11,6 @@
         "ms-python.debugpy",
         "ms-python.isort",
         "ms-python.mypy-type-checker",
-        "ms-python.pylint",
         "ms-python.vscode-pylance",
         "pkief.material-icon-theme",
         "shd101wyy.markdown-preview-enhanced",

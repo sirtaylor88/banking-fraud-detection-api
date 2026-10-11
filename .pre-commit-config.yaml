@@ -15,22 +15,9 @@ repos:
         types: [python]
         pass_filenames: false
 
-      - id: pylint
-        name: pylint (uv)
-        entry: uv run pylint
-        language: system
-        types: [python]
-
       - id: mypy
         name: mypy (uv)
         entry: uv run mypy .
-        language: system
-        types: [python]
-        pass_filenames: false
-
-      - id: pydocstyle
-        name: pydocstyle (uv)
-        entry: uv run pydocstyle src/ --convention=google
         language: system
         types: [python]
         pass_filenames: false
